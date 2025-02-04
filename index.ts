@@ -16,9 +16,14 @@ import mongoSanitize from 'express-mongo-sanitize';
 import helmet from 'helmet';
 
 // routes
+import authRoute from './routes/authRoute';
+import userRoute from './routes/userRoute';
+
+import connectDB from './db/connect';
+import { authenticatedUser } from './middleware/authenticatedUser';
 import errorHandleMiddleware from './middleware/error-handle';
 import { NotFoundMiddleware } from './middleware/not-found';
-import authRoute from './routes/authRoute';
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -47,6 +52,7 @@ app.get('/api/v1', (req, res) => {
 });
 
 app.use('/api/v1/auth', asyncHandler(authRoute));
+app.use('/api/v1/user', authenticatedUser, asyncHandler(userRoute));
 
 // errors handler middleware
 app.use(errorHandleMiddleware as unknown as RequestHandler);
@@ -56,12 +62,12 @@ const port = process.env.port || 5000;
 
 async function start(): Promise<void> {
   try {
-    await app.listen(port, () => console.log(`Server running on port ${port}`));
+    await connectDB(process.env.MONGO_URL as string);
+    app.listen(port, () => console.log(`Server running on port ${port}`));
   } catch (error) {
     console.error(error);
     process.exit(1);
   }
 }
 
-start();
 start();

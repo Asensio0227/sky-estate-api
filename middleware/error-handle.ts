@@ -16,13 +16,13 @@ const errorHandleMiddleware = (
     msg: err.message || 'Something went wrong try again later!',
   };
 
-  // if (err.name === 'ValidationError') {
-  //   const customError = { msg: '', statusCode: 0 };
-  //   customError.msg = Object.values(err.errors)
-  //     .map((item: ValidationErrorItem) => item.message)
-  //     .join(',');
-  //   customError.statusCode = 400;
-  // }
+  if (err.name === 'ValidationError') {
+    const customError = { msg: '', statusCode: 0 };
+    customError.msg = Object.values(err.errors)
+      .map((item: any) => item.message)
+      .join(',');
+    customError.statusCode = 400;
+  }
 
   if (err.code && err.code === 11000) {
     customError.msg = `Duplicate value enter for ${Object.keys(

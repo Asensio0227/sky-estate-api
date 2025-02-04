@@ -36,7 +36,8 @@ export interface ContactOb {
 export interface UIUser extends Document {
   first_name: modalTypes;
   last_name: modalTypes;
-  email: modalTypes;
+  email: modalTypes | string;
+  username: modalTypes | string;
   gender: modalTypes;
   ideaNumber: modalTypes;
   role: modalTypes;
@@ -48,14 +49,14 @@ export interface UIUser extends Document {
 
 export interface UserDocument extends UIUser, mongoose.Document {
   password: string;
-  verificationToken?: number;
+  verificationToken: number | string;
   avatar: string;
   expoToken: string;
   banned: boolean;
   isVerified: boolean;
-  passwordToken: number;
-  passwordTokenExpirationDate: Date;
-  verified: Date;
+  passwordToken: number | null;
+  passwordTokenExpirationDate: Date | null;
+  verified: Date | number;
   createdAt: Date;
   updatedAT: Date;
   ComparePassword(candidatePassword: string): Promise<boolean>;
@@ -105,6 +106,12 @@ const userSchema = new mongoose.Schema<UserDocument>(
       },
       trim: true,
     },
+    username: {
+      type: String,
+      unique: true,
+      required: [true, 'Please provide your username'],
+      trim: true,
+    },
     expoToken: {
       type: String,
     },
@@ -138,6 +145,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
       phone_number: {
         type: String,
         required: [true, 'Please provide your phone number'],
+        unique: true,
       },
       email: {
         type: String,
