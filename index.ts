@@ -5,6 +5,7 @@ dotenv.config();
 import express, { RequestHandler } from 'express';
 const app = express();
 
+import cloudinary from 'cloudinary';
 import asyncHandler from 'express-async-handler';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
@@ -17,12 +18,21 @@ import helmet from 'helmet';
 
 // routes
 import authRoute from './routes/authRoute';
+import estateRoute from './routes/estateRoute';
+import reviewRoute from './routes/reviewRoute';
 import userRoute from './routes/userRoute';
 
 import connectDB from './db/connect';
 import { authenticatedUser } from './middleware/authenticatedUser';
 import errorHandleMiddleware from './middleware/error-handle';
 import { NotFoundMiddleware } from './middleware/not-found';
+
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET,
+  secure: true,
+});
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -53,6 +63,8 @@ app.get('/api/v1', (req, res) => {
 
 app.use('/api/v1/auth', asyncHandler(authRoute));
 app.use('/api/v1/user', authenticatedUser, asyncHandler(userRoute));
+app.use('/api/v1/estate', asyncHandler(estateRoute));
+app.use('/api/v1/review', asyncHandler(reviewRoute));
 
 // errors handler middleware
 app.use(errorHandleMiddleware as unknown as RequestHandler);

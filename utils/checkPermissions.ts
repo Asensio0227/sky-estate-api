@@ -1,5 +1,5 @@
 import { UnauthorizedError } from '../errors/custom';
-import { UserDocument } from '../models/userModal';
+import { UserDocument } from '../models/userModel';
 
 export const checkPermissions = (
   requestUser: UserDocument | any,

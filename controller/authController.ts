@@ -7,8 +7,8 @@ import {
   UnauthenticatedError,
   UnauthorizedError,
 } from '../errors/custom';
-import Token from '../models/tokenModal';
-import User, { UserDocument } from '../models/userModal';
+import Token from '../models/tokenModel';
+import User, { UserDocument } from '../models/userModel';
 import { sendResetPasswordEmail, sendVerificationEmail } from '../utils/email';
 import { attachCookiesToResponse, createTokenUser } from '../utils/jwt';
 
@@ -49,6 +49,10 @@ export const resendCode = async (req: Request, res: Response) => {
 
   if (!user) {
     throw new BadRequestError('User not found');
+  }
+
+  if (user.isVerified) {
+    throw new BadRequestError('User is verified');
   }
 
   const fName = `${user.first_name} ${user.last_name}`;

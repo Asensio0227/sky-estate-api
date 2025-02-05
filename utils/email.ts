@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { modalTypes } from '../models/userModal';
+import { modalTypes } from '../models/userModel';
 import nodemailerConfig from './nodemailer';
 
 export const sendEmail = async ({

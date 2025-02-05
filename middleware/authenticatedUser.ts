@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
-import { UnauthenticatedError } from '../errors/custom';
-import Token from '../models/tokenModal';
+import { UnauthenticatedError, UnauthorizedError } from '../errors/custom';
+import Token from '../models/tokenModel';
 import { attachCookiesToResponse, isTokenValid } from '../utils/jwt';
 
 export interface authUser {
@@ -32,7 +32,6 @@ export const authenticatedUser = async (
         access_token,
         process.env.JWT_SECRET!
       );
-      const testUser = payload.user?.userId === '';
       req.user = payload.user;
       return next();
     }
@@ -41,9 +40,14 @@ export const authenticatedUser = async (
       refresh_token,
       process.env.JWT_SECRET_REFRESH!
     );
+
+    console.log(`=====payload====`);
+    console.log(payload);
+    console.log(`=====payload====`);
+
     const existingToken = await Token.findOne({
       user: payload.user.userId,
-      refreshToken: payload.refresh_token,
+      refreshToken: payload.refreshToken,
     });
 
     if (!existingToken || !existingToken?.isValid) {
@@ -56,10 +60,19 @@ export const authenticatedUser = async (
       refreshToken: existingToken.refreshToken,
     });
 
-    const testUser = payload.user?.userId === '';
     req.user = payload.user;
     next();
   } catch (error: any) {
-    console.log(error);
+    throw new UnauthenticatedError('Authentication Invalid');
   }
+};
+
+export const authorizedPermissions = (...role: string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const userRole = req.user?.role || 'user';
+    if (!role.includes(userRole)) {
+      throw new UnauthorizedError('Unauthorized to access this route');
+    }
+    next();
+  };
 };

@@ -2,22 +2,36 @@ import crypto from 'crypto';
 import { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { UnauthenticatedError } from '../errors/custom';
-import { UserDocument } from '../models/userModal';
+import { UserDocument } from '../models/userModel';
 
-export const createJwt = ({ payload }: { payload: any }) => {
+const createJwt = ({ payload }: { payload: any }) => {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET must be defined');
   }
-  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+  const lifetime: any = process.env.JWT_LIFETIME;
+
+  if (!lifetime) {
+    throw new Error('JWR_LIFETIME must be defined');
+  }
+  const token = jwt.sign(payload, process.env.JWT_SECRET, {
+    expiresIn: lifetime,
+  });
   return token;
 };
 
-export const createRefreshToken = ({ payload }: { payload: any }) => {
+const createRefreshToken = ({ payload }: { payload: any }) => {
   if (!process.env.JWT_SECRET_REFRESH) {
     throw new Error('JWT_SECRET_REFRESH must be defined');
   }
+
+  const lifetime: any = process.env.JWT_LIFETIME;
+
+  if (!lifetime) {
+    throw new Error('JWR_LIFETIME must be defined');
+  }
+
   const token = jwt.sign(payload, process.env.JWT_SECRET_REFRESH, {
-    expiresIn: '7d',
+    expiresIn: lifetime,
   });
   return token;
 };
@@ -31,7 +45,7 @@ export const attachCookiesToResponse = ({
   user: unknown | UserDocument;
   refreshToken: string;
 }) => {
-  const accessTokenJWT = createJwt({ payload: { user } });
+  const accessTokenJWT = createJwt({ payload: { user, refreshToken } });
   const refreshTokenJWT = createRefreshToken({
     payload: { user, refreshToken },
   });
@@ -40,19 +54,15 @@ export const attachCookiesToResponse = ({
 
   res.cookie('access_token', accessTokenJWT, {
     httpOnly: true,
-    maxAge: longerExp,
     expires: new Date(Date.now() + oneDay),
-    secure: process.env.NODE_ENV !== 'production',
-    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
     signed: true,
   });
 
   res.cookie('refresh_token', refreshTokenJWT, {
     httpOnly: true,
-    maxAge: longerExp,
     expires: new Date(Date.now() + longerExp),
-    secure: process.env.NODE_ENV !== 'production',
-    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
     signed: true,
   });
 };

@@ -7,6 +7,11 @@ export enum statusOption {
   offline = 'offline', // Changed from Offline to offline
 }
 
+export interface Location {
+  type: 'Point';
+  coordinates: number[];
+}
+
 export interface modalTypes {
   type: String;
   required?: [true, string];
@@ -45,6 +50,7 @@ export interface UIUser extends Document {
   date_of_birth: modalTypes;
   address: addressOb;
   contact_details: ContactOb;
+  userAds_address: Location;
 }
 
 export interface UserDocument extends UIUser, mongoose.Document {
@@ -168,6 +174,10 @@ const userSchema = new mongoose.Schema<UserDocument>(
       required: [true, 'Please provide your password'],
       minlength: 6,
     },
+    userAds_address: {
+      type: { type: String, enum: ['Point'], required: true },
+      coordinates: { type: [Number], required: true },
+    },
     role: {
       type: String,
       enum: ['admin', 'user', 'member', 'assistant'],
@@ -204,5 +214,7 @@ userSchema.methods.ComparePassword = async function (
 ): Promise<boolean> {
   return await bcrypt.compare(candidatePassword, this.password);
 };
+
+userSchema.index({ address: '2dsphere' });
 
 export default mongoose.model<UserDocument>('User', userSchema);
