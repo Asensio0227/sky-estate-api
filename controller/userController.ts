@@ -91,7 +91,6 @@ export const updateUser = async (req: Request, res: Response) => {
   if (user && typeof user._id === 'string') {
     checkPermissions(req.user, user._id);
   } else if (user && typeof user._id === 'object' && user._id !== null) {
-    // Assuming _id could be an ObjectId or similar
     checkPermissions(req.user, user._id.toString());
   } else {
     throw new NotFoundError('User not found or invalid ID');

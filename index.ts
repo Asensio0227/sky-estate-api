@@ -19,7 +19,10 @@ import helmet from 'helmet';
 // routes
 import authRoute from './routes/authRoute';
 import estateRoute from './routes/estateRoute';
+import messageRoute from './routes/messageRoute';
+import notificationsRoute from './routes/notificationsRoute';
 import reviewRoute from './routes/reviewRoute';
+import roomRoute from './routes/roomRoute';
 import userRoute from './routes/userRoute';
 
 import connectDB from './db/connect';
@@ -65,6 +68,9 @@ app.use('/api/v1/auth', asyncHandler(authRoute));
 app.use('/api/v1/user', authenticatedUser, asyncHandler(userRoute));
 app.use('/api/v1/estate', asyncHandler(estateRoute));
 app.use('/api/v1/review', asyncHandler(reviewRoute));
+app.use('/api/v1/room', authenticatedUser, asyncHandler(roomRoute));
+app.use('/api/v1/message', authenticatedUser, asyncHandler(messageRoute));
+app.use('/api/v1/notify', authenticatedUser, asyncHandler(notificationsRoute));
 
 // errors handler middleware
 app.use(errorHandleMiddleware as unknown as RequestHandler);

@@ -9,6 +9,20 @@ export interface Review extends mongoose.Document {
   estate: mongoose.Types.ObjectId | unknown;
 }
 
+export interface ReviewModel
+  extends mongoose.Model<
+    Review,
+    // mongoose.Query,
+    // mongoose.Helper,
+    // mongoose.Virtuals,
+    // mongoose.HydratedDocument,
+    mongoose.Schema
+  > {
+  calculateAverageRating(
+    estateId: string
+  ): Promise<{ average_rating: number; numOfReviews: number }>;
+}
+
 const reviewSchema = new mongoose.Schema(
   {
     rating: {
@@ -41,12 +55,6 @@ const reviewSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-// export interface ReviewModel extends mongoose.Model {
-//   calculateAverageRating(
-//     estateId: string
-//   ): Promise<{ average_rating: Number; numOfReviews: Number }>;
-// }
 
 reviewSchema.index({ estate: 1, user: 1 }, { unique: true });
 
@@ -81,7 +89,7 @@ reviewSchema.post('save', async function (this: Review) {
 });
 
 reviewSchema.post('deleteOne', async function (this: Review) {
-  const model = this.constructor as any;
+  const model = mongoose.model('Review') as unknown as ReviewModel;
   await model.calculateAverageRating(this.estate as string);
 });
 
