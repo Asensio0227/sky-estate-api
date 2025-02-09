@@ -65,6 +65,8 @@ export interface UserDocument extends UIUser, mongoose.Document {
   verified: Date | number;
   createdAt: Date;
   updatedAT: Date;
+  embedding_text: String;
+  embedding: any;
   ComparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -199,9 +201,13 @@ const userSchema = new mongoose.Schema<UserDocument>(
     verificationToken: {
       type: Number,
     },
+    embedding_text: String,
+    embedding: { type: [Number], index: '2dsphere' },
   },
   { timestamps: true }
 );
+
+userSchema.index({ embedding: '2dsphere' }, { name: 'vector_index' });
 
 userSchema.pre('save', async function (this: UserDocument) {
   if (!this.isModified('password')) return;

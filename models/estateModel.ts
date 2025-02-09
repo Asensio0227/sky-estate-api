@@ -1,5 +1,4 @@
-import { NextFunction } from 'express';
-import mongoose, { Model } from 'mongoose';
+import mongoose from 'mongoose';
 import Review from './reviewModel';
 import { ContactOb, Location, modalTypes } from './userModel';
 
@@ -22,6 +21,7 @@ export interface UIEstateDocument extends mongoose.Document {
 }
 
 export interface estateDocument extends UIEstateDocument, mongoose.Document {
+  featured: boolean;
   createdAt: Date;
   updatedAT: Date;
 }
@@ -59,6 +59,10 @@ const estateSchema = new mongoose.Schema<estateDocument>(
       type: Number,
       required: [true, 'Please provide price'],
       min: 100,
+    },
+    featured: {
+      type: Boolean,
+      default: true,
     },
     location: {
       type: { type: String, enum: ['Point'], required: true },

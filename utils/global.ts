@@ -1,5 +1,6 @@
 import cloudinary from 'cloudinary';
 import { Request } from 'express';
+import { estateDocument } from '../models/estateModel';
 
 export let sortOptions: any = {
   newest: '-createdAt',
@@ -64,3 +65,13 @@ export function imageUpload(
     }
   });
 }
+
+export const checkFeaturedStatus = (ad: estateDocument) => {
+  const now = new Date();
+  const createdAtDate = new Date(ad.createdAt);
+  const sevenDaysLater = new Date(
+    createdAtDate.setDate(createdAtDate.getDate() + 7)
+  );
+
+  return now < sevenDaysLater;
+};

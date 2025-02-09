@@ -1,9 +1,14 @@
 import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { BadRequestError, NotFoundError } from '../errors/custom';
-import Ads from '../models/estateModel';
+import Ads, { estateDocument } from '../models/estateModel';
 import User from '../models/userModel';
-import { imageUpload, isValidSortKey, queryFilters } from '../utils/global';
+import {
+  checkFeaturedStatus,
+  imageUpload,
+  isValidSortKey,
+  queryFilters,
+} from '../utils/global';
 
 export const createAd = async (req: Request, res: Response) => {
   req.body.user = req.user?.userId;
@@ -28,17 +33,17 @@ export const retrieveAllAd = async (req: Request, res: Response) => {
   let { search, sort, category } = req.query;
   const user = await User.findOne({ _id: req.user?.userId });
 
-  // if (!user || !user.address) {
-  //   throw new BadRequestError('User or address not found');
-  // }
+  if (!user || !user.address) {
+    throw new BadRequestError('User or address not found');
+  }
 
-  // const userLocation = user.userAds_address.coordinates;
+  const userLocation = user.userAds_address.coordinates;
   let queryObj: any = {
-    // location: {
-    //   $geoWithin: {
-    //     $centerSphere: [userLocation, 50 / 6378.1], // Radius in radians (50 km)
-    //   },
-    // },
+    location: {
+      $geoWithin: {
+        $centerSphere: [userLocation, 50 / 6378.1], // Radius in radians (50 km)
+      },
+    },
   };
 
   if (typeof category === 'string' && category.trim() !== 'all') {
@@ -58,16 +63,23 @@ export const retrieveAllAd = async (req: Request, res: Response) => {
     .limit(limit)
     .populate({ path: 'user', select: 'username avatar' });
 
+  await Promise.all(
+    ads.map(async (ad: estateDocument) => {
+      ad.featured = checkFeaturedStatus(ad);
+      await ad.save();
+    })
+  );
+
   let maxRadius = 500000;
   let currentRadius = 200;
 
   while (ads.length === 0 && currentRadius <= maxRadius) {
     const expandedQueryObj: any = {
-      // location: {
-      //   $geoWithin: {
-      //     $centerSphere: [userLocation, currentRadius / 6378.1], // Convert km to radians
-      //   },
-      // },
+      location: {
+        $geoWithin: {
+          $centerSphere: [userLocation, currentRadius / 6378.1], // Convert km to radians
+        },
+      },
     };
 
     ads = await Ads.find(expandedQueryObj)
