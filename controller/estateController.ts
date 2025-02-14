@@ -17,6 +17,9 @@ export const createAd = async (req: Request, res: Response) => {
 
   if (files) {
     for (const file of files) {
+      console.log(`===file create ad====`);
+      console.log(file);
+      console.log(`===file create ad====`);
       const url = await imageUpload(file);
       uris.push(url);
     }
@@ -33,7 +36,7 @@ export const retrieveAllAd = async (req: Request, res: Response) => {
   let { search, sort, category } = req.query;
   const user = await User.findOne({ _id: req.user?.userId });
 
-  if (!user || !user.address) {
+  if (!user || !user.physical_address) {
     throw new BadRequestError('User or address not found');
   }
 
@@ -89,6 +92,41 @@ export const retrieveAllAd = async (req: Request, res: Response) => {
 
     currentRadius += 100;
   }
+
+  const totalAds = await Ads.countDocuments(queryObj);
+  const numOfPages = Math.ceil(totalAds / limit);
+  res.status(StatusCodes.OK).json({ totalAds, numOfPages, ads, page });
+};
+
+export const retrieveAllUserAd = async (req: Request, res: Response) => {
+  let { search, sort, category } = req.query;
+  let queryObj: any = {
+    user: req.user?.userId,
+  };
+
+  if (typeof category === 'string' && category.trim() !== 'all') {
+    queryObj.category = category;
+  }
+
+  if (typeof search === 'string' && search.trim()) {
+    queryObj.title = new RegExp(search, 'i');
+  }
+
+  const sortKeys = 'title';
+  const sortParam = isValidSortKey(sort) ? sort : 'string';
+  const { sortKey, skip, limit, page } = queryFilters(req, sortParam, sortKeys);
+  let ads = await Ads.find(queryObj)
+    .sort(sortKey)
+    .skip(skip)
+    .limit(limit)
+    .populate({ path: 'user', select: 'username avatar' });
+
+  await Promise.all(
+    ads.map(async (ad: estateDocument) => {
+      ad.featured = checkFeaturedStatus(ad);
+      await ad.save();
+    })
+  );
 
   const totalAds = await Ads.countDocuments(queryObj);
   const numOfPages = Math.ceil(totalAds / limit);

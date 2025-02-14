@@ -10,14 +10,27 @@ import {
 import Token from '../models/tokenModel';
 import User, { UserDocument } from '../models/userModel';
 import { sendResetPasswordEmail, sendVerificationEmail } from '../utils/email';
+import { imageUpload } from '../utils/global';
 import { attachCookiesToResponse, createTokenUser } from '../utils/jwt';
 
 export const register = async (req: Request, res: Response) => {
-  const userData = req.body;
-  const emailAlreadyExists = await User.findOne({ email: userData.email });
+  const emailAlreadyExists = await User.findOne({ email: req.body.email });
 
   if (emailAlreadyExists) {
     throw new BadRequestError('Email already exists');
+  }
+
+  if (req.file) {
+    try {
+      const file = req.file;
+      console.log(`=====file register ======`);
+      console.log(file);
+      console.log(`=====file register ======`);
+      const { url } = await imageUpload(file);
+      req.body.avatar = url;
+    } catch (error: any) {
+      throw new BadRequestError(`Cloudinary upload error, ${error.message}`);
+    }
   }
 
   const isFirstAccount = (await User.countDocuments({})) === 0;
@@ -26,15 +39,15 @@ export const register = async (req: Request, res: Response) => {
   const max = parseFloat(process.env.CRYPTO_MAX as any);
   const verificationToken = crypto.randomInt(min, max + 1);
   const user: UserDocument = await User.create({
-    ...userData,
+    ...req.body,
     role,
     verificationToken,
   });
   const fName = `${user.first_name} ${user.last_name}`;
-  const email = user.email;
+  const Email = user.email;
   await sendVerificationEmail({
     name: fName,
-    email: email,
+    email: Email,
     verificationToken: user.verificationToken,
   });
 
@@ -44,8 +57,7 @@ export const register = async (req: Request, res: Response) => {
 };
 
 export const resendCode = async (req: Request, res: Response) => {
-  const { email } = req.body;
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email: req.body.email });
 
   if (!user) {
     throw new BadRequestError('User not found');
@@ -74,7 +86,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
   }
 
   if (user.verificationToken !== verificationToken) {
-    throw new UnauthenticatedError('Verification Failed!');
+    throw new UnauthenticatedError('Verification token Failed!');
   }
 
   user.isVerified = true;
@@ -86,7 +98,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
 };
 
 export const login = async (req: Request, res: Response) => {
-  const { username, password } = req.body;
+  const { username, password, expoToken, userAds_address } = req.body;
 
   if (!username || !password) {
     throw new BadRequestError('Please provide username and password!');
@@ -94,7 +106,7 @@ export const login = async (req: Request, res: Response) => {
 
   const user = await User.findOneAndUpdate(
     { username },
-    { status: 'online' },
+    { status: 'online', expoToken, userAds_address },
     { new: true, runValidator: true }
   );
 
@@ -204,6 +216,10 @@ export const resetPassword = async (req: Request, res: Response) => {
     throw new BadRequestError('Invalid credentials!');
   }
 
+  if (user.passwordToken !== token) {
+    throw new UnauthenticatedError('Password token Failed!');
+  }
+
   const currentDate = new Date();
   if (
     user.passwordToken === token &&
@@ -215,5 +231,5 @@ export const resetPassword = async (req: Request, res: Response) => {
     await user.save();
   }
 
-  res.status(StatusCodes.OK).json({ msg: 'reset password  ' });
+  res.status(StatusCodes.OK).json({ msg: 'Success! Reset password.' });
 };

@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import Review from './reviewModel';
-import { ContactOb, Location, modalTypes } from './userModel';
+import { ContactOb, modalTypes } from './userModel';
 
 export interface IPhoto {
   id?: string;
@@ -12,7 +12,7 @@ export interface UIEstateDocument extends mongoose.Document {
   title: string;
   description: string;
   price: number;
-  location: Location;
+  location: any;
   contact_details: ContactOb;
   user: mongoose.Types.ObjectId | unknown;
   average_rating: Number;
@@ -66,7 +66,7 @@ const estateSchema = new mongoose.Schema<estateDocument>(
     },
     location: {
       type: { type: String, enum: ['Point'], required: true },
-      coordinates: { type: [Number], index: '2dsphere', required: true },
+      coordinates: { type: Array, index: '2dsphere', required: true },
     },
     contact_details: {
       phone_number: {
@@ -77,6 +77,10 @@ const estateSchema = new mongoose.Schema<estateDocument>(
         type: String,
         required: [true, 'Please provide your email address'],
         match: [/.+@.+\..+/, 'Please enter a valid email address'],
+      },
+      address: {
+        type: String,
+        required: [true, 'Please provide your address'],
       },
     },
     average_rating: {

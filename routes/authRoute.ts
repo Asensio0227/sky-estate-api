@@ -12,8 +12,9 @@ import {
   verifyEmail,
 } from '../controller/authController';
 import { authenticatedUser } from '../middleware/authenticatedUser';
+import { upload } from '../middleware/multerMiddleware';
 
-router.post('/register', register);
+router.post('/register', upload.single('avatar'), register);
 router.post('/verify-email', verifyEmail);
 router.post('/login', login);
 router.post('/reset-password', resetPassword);

@@ -99,6 +99,9 @@ export const updateUser = async (req: Request, res: Response) => {
   if (req.file) {
     try {
       const file = req.file;
+      console.log(`=====file update user ======`);
+      console.log(file);
+      console.log(`=====file update user ======`);
       const { url } = await imageUpload(file);
       newUser.avatar = url;
     } catch (error: any) {
@@ -114,8 +117,21 @@ export const updateUser = async (req: Request, res: Response) => {
   if (newUser.last_name) user.last_name = newUser.last_name;
   if (newUser.first_name) user.first_name = newUser.first_name;
   if (newUser.ideaNumber) user.ideaNumber = newUser.ideaNumber;
-  if (newUser.address) user.address = newUser.address;
-  if (newUser.contact_details) user.contact_details = newUser.contact_details;
+  if (newUser.userAds_address) {
+    const { userAds_address } = newUser;
+    const adsAddress = userAds_address;
+    user.userAds_address = adsAddress;
+  }
+  if (newUser.physical_address) {
+    const { physical_address } = newUser;
+    const physicalAddress = physical_address;
+    user.physical_address = physicalAddress;
+  }
+  if (newUser.contact_details) {
+    const { contact_details } = newUser;
+    const contact = contact_details;
+    user.contact_details = contact;
+  }
   await user.save();
 
   res.status(StatusCodes.OK).json({ user });

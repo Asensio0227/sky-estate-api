@@ -36,6 +36,7 @@ export interface addressOb {
 export interface ContactOb {
   phone_number: modalTypes;
   email: modalTypes;
+  address?: modalTypes;
 }
 
 export interface UIUser extends Document {
@@ -48,9 +49,9 @@ export interface UIUser extends Document {
   role: modalTypes;
   status: statusOption.offline;
   date_of_birth: modalTypes;
-  address: addressOb;
-  contact_details: ContactOb;
-  userAds_address: Location;
+  physical_address: addressOb | any;
+  contact_details: ContactOb | any;
+  userAds_address: any;
 }
 
 export interface UserDocument extends UIUser, mongoose.Document {
@@ -127,7 +128,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
       type: String,
       required: [true, 'Please provide your date of birth'],
     },
-    address: {
+    physical_address: {
       street: {
         type: String,
         required: [true, 'Please provide your street'],
@@ -177,8 +178,9 @@ const userSchema = new mongoose.Schema<UserDocument>(
       minlength: 6,
     },
     userAds_address: {
-      type: { type: String, enum: ['Point'], required: true },
-      coordinates: { type: [Number], required: true },
+      type: Object,
+      // type: { type: String, enum: ['Point'], required: true },
+      // coordinates: { type: Array, required: true },
     },
     role: {
       type: String,

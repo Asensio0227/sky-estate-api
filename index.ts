@@ -11,10 +11,13 @@ import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import path from 'path';
 
+import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import mongoSanitize from 'express-mongo-sanitize';
+import xss from 'express-xss-sanitizer';
 import helmet from 'helmet';
+import hpp from 'hpp';
 
 // routes
 import authRoute from './routes/authRoute';
@@ -48,12 +51,20 @@ app.use(limiter);
 if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
+const options = {
+  allowProtocolRelativeUrls: false,
+  stripIgnoreTag: true,
+  stripIgnoreTagBody: true,
+};
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 app.use(cookieParser(process.env.JWT_SECRET));
+// app.use(bodyParser.json({ type: 'application/*+json' }));
 app.use(helmet());
 app.use(cors());
-// app.use(xss());
+app.use(hpp());
+// const xssMiddleware = xss({});
+// app.use(xssMiddleware);
 app.use(mongoSanitize());
 
 app.get('/', function (req, res) {
@@ -73,8 +84,8 @@ app.use('/api/v1/message', authenticatedUser, asyncHandler(messageRoute));
 app.use('/api/v1/notify', authenticatedUser, asyncHandler(notificationsRoute));
 
 // errors handler middleware
-app.use(errorHandleMiddleware as unknown as RequestHandler);
 app.use(NotFoundMiddleware as unknown as RequestHandler);
+app.use(errorHandleMiddleware as unknown as RequestHandler);
 
 const port = process.env.port || 5000;
 
