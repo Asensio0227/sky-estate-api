@@ -61,6 +61,7 @@ export interface UserDocument extends UIUser, mongoose.Document {
   expoToken: string;
   banned: boolean;
   isVerified: boolean;
+  hasOpenedApp: boolean;
   passwordToken: number | null;
   passwordTokenExpirationDate: Date | null;
   verified: Date | number;
@@ -150,6 +151,10 @@ const userSchema = new mongoose.Schema<UserDocument>(
         required: [true, 'Please provide your country'],
       },
     },
+    hasOpenedApp: {
+      type: Boolean,
+      default: false,
+    },
     contact_details: {
       phone_number: {
         type: String,
@@ -159,8 +164,8 @@ const userSchema = new mongoose.Schema<UserDocument>(
       email: {
         type: String,
         required: [true, 'Please provide your email address'],
-        unique: true,
         match: [/.+@.+\..+/, 'Please enter a valid email address'],
+        unique: true,
       },
     },
     status: {
@@ -178,9 +183,8 @@ const userSchema = new mongoose.Schema<UserDocument>(
       minlength: 6,
     },
     userAds_address: {
-      type: Object,
-      // type: { type: String, enum: ['Point'], required: true },
-      // coordinates: { type: Array, required: true },
+      type: { type: String, enum: ['Point'], required: true },
+      coordinates: { type: Array, index: '2dsphere', required: true },
     },
     role: {
       type: String,
@@ -208,8 +212,12 @@ const userSchema = new mongoose.Schema<UserDocument>(
   },
   { timestamps: true }
 );
-
-userSchema.index({ embedding: '2dsphere' }, { name: 'vector_index' });
+// AI
+// userSchema.index(
+//   { embedding: '2dsphere', address: '2dsphere' },
+//   { name: 'vector_index' }
+// );
+userSchema.index({ userAds_address: '2dsphere' });
 
 userSchema.pre('save', async function (this: UserDocument) {
   if (!this.isModified('password')) return;
@@ -222,7 +230,5 @@ userSchema.methods.ComparePassword = async function (
 ): Promise<boolean> {
   return await bcrypt.compare(candidatePassword, this.password);
 };
-
-userSchema.index({ address: '2dsphere' });
 
 export default mongoose.model<UserDocument>('User', userSchema);

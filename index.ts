@@ -77,8 +77,8 @@ app.get('/api/v1', (req, res) => {
 
 app.use('/api/v1/auth', asyncHandler(authRoute));
 app.use('/api/v1/user', authenticatedUser, asyncHandler(userRoute));
-app.use('/api/v1/estate', asyncHandler(estateRoute));
-app.use('/api/v1/review', asyncHandler(reviewRoute));
+app.use('/api/v1/estate', authenticatedUser, asyncHandler(estateRoute));
+app.use('/api/v1/review', authenticatedUser, asyncHandler(reviewRoute));
 app.use('/api/v1/room', authenticatedUser, asyncHandler(roomRoute));
 app.use('/api/v1/message', authenticatedUser, asyncHandler(messageRoute));
 app.use('/api/v1/notify', authenticatedUser, asyncHandler(notificationsRoute));

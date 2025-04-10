@@ -41,10 +41,6 @@ export const authenticatedUser = async (
       process.env.JWT_SECRET_REFRESH!
     );
 
-    console.log(`=====payload====`);
-    console.log(payload);
-    console.log(`=====payload====`);
-
     const existingToken = await Token.findOne({
       user: payload.user.userId,
       refreshToken: payload.refreshToken,

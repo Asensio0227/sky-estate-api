@@ -3,13 +3,13 @@ import { StatusCodes } from 'http-status-codes';
 import { NotFoundError, UnauthorizedError } from '../errors/custom';
 import Message from '../models/messageModel';
 import Room, { RoomType } from '../models/roomModel';
-import { imageUpload } from '../utils/global';
+import { imageUpload, queryFilters } from '../utils/global';
 
 export const sendMsg = async (req: Request, res: Response) => {
   const fileTypes: any = {
-    audio: [],
-    video: [],
-    photo: [],
+    audio: '',
+    video: '',
+    photo: '',
   };
   const files: any = req.files;
 
@@ -44,14 +44,17 @@ export const sendMsg = async (req: Request, res: Response) => {
 };
 
 export const retrieveMsg = async (req: Request, res: Response) => {
+  const { page, skip, limit } = queryFilters(req);
   const messages = await Message.find({ roomId: req.params.roomId })
     .sort('-createdAt')
+    .limit(limit)
+    .skip(skip)
     .populate({
       path: 'user',
       select: 'username avatar expoToken email status _id',
     });
 
-  res.status(StatusCodes.OK).json({ messages });
+  res.status(StatusCodes.OK).json({ messages, page });
 };
 
 export const updateMsg = async (req: Request, res: Response) => {

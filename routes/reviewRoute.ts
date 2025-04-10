@@ -6,16 +6,15 @@ import {
   retrieveReview,
   updateReview,
 } from '../controller/reviewController';
-import { authenticatedUser } from '../middleware/authenticatedUser';
 
 const router = express.Router();
 
-router.route('/').post(authenticatedUser, createReview).get(retrieveAllReview);
+router.route('/').post(createReview).get(retrieveAllReview);
 
 router
   .route('/:id')
   .get(retrieveReview)
-  .patch(authenticatedUser, updateReview)
-  .delete(authenticatedUser, removeReview);
+  .patch(updateReview)
+  .delete(removeReview);
 
 export default router;

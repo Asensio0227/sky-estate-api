@@ -23,9 +23,6 @@ export const register = async (req: Request, res: Response) => {
   if (req.file) {
     try {
       const file = req.file;
-      console.log(`=====file register ======`);
-      console.log(file);
-      console.log(`=====file register ======`);
       const { url } = await imageUpload(file);
       req.body.avatar = url;
     } catch (error: any) {
@@ -38,6 +35,8 @@ export const register = async (req: Request, res: Response) => {
   const min = parseFloat(process.env.CRYPTO_MIN as any);
   const max = parseFloat(process.env.CRYPTO_MAX as any);
   const verificationToken = crypto.randomInt(min, max + 1);
+  const parsedLocation = JSON.parse(req.body.userAds_address);
+  req.body.userAds_address = parsedLocation;
   const user: UserDocument = await User.create({
     ...req.body,
     role,

@@ -1,6 +1,7 @@
 import cloudinary from 'cloudinary';
 import { Request } from 'express';
-import { estateDocument } from '../models/estateModel';
+import Ads, { estateDocument } from '../models/estateModel';
+import User from '../models/userModel';
 
 export let sortOptions: any = {
   newest: '-createdAt',
@@ -41,7 +42,7 @@ export function queryFilters(req: Request, sort?: string, sortKeys?: string) {
 
 export function imageUpload(
   file: Express.Multer.File
-): Promise<{ url: string }> {
+): Promise<{ url: string; id?: string }> {
   return new Promise((resolve, reject) => {
     try {
       const uploadOptions: any = {
@@ -52,9 +53,10 @@ export function imageUpload(
       cloudinary.v2.uploader
         .upload_stream(uploadOptions, (error, result) => {
           if (result && result.secure_url) {
-            const { secure_url } = result;
+            const { secure_url, public_id } = result;
             resolve({
               url: secure_url,
+              id: public_id,
             });
           }
           return reject({ message: error });
@@ -75,3 +77,52 @@ export const checkFeaturedStatus = (ad: estateDocument) => {
 
   return now < sevenDaysLater;
 };
+
+export async function findAds(
+  queryObj: any,
+  sortKey: any,
+  maxRadius: any,
+  userLocation: any,
+  userSearchState: any
+) {
+  let ads = await Ads.find(queryObj)
+    .sort(sortKey)
+    .skip(userSearchState.skip)
+    .limit(userSearchState.limit)
+    .populate({ path: 'user', select: 'username avatar contact_details' });
+
+  await Promise.all(
+    ads.map(async (ad: estateDocument) => {
+      ad.featured = checkFeaturedStatus(ad);
+      await ad.save();
+    })
+  );
+
+  while (ads.length === 0 && userSearchState.currentRadius <= maxRadius) {
+    const expandedQueryObj = {
+      location: {
+        $geoWithin: {
+          $centerSphere: [userLocation, userSearchState.currentRadius / 6378.1], // Convert km to radians
+        },
+      },
+    };
+
+    ads = await Ads.find(expandedQueryObj)
+      .sort(sortKey)
+      .skip(userSearchState.skip)
+      .limit(userSearchState.limit)
+      .populate({ path: 'user', select: 'username avatar contact_details' });
+
+    if (ads.length > 0) {
+      return ads;
+    }
+    userSearchState.currentRadius += 1000;
+  }
+
+  return ads;
+}
+
+export async function checkIfFirstTimeUser(userId: any) {
+  const user = await User.findById(userId);
+  return !user?.hasOpenedApp;
+}

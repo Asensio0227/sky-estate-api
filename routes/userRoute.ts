@@ -20,7 +20,7 @@ router.put(
   authorizedPermissions('admin', 'assistant', 'member'),
   actionUser
 );
-router.patch('/:id', updatePassword);
+router.patch('/', updatePassword);
 router.get('/:id', getSingleUser);
 
 export default router;

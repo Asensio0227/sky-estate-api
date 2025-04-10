@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { BadRequestError, NotFoundError } from '../errors/custom';
-import Estate from '../models/estateModel';
+import { default as Ads, default as Estate } from '../models/estateModel';
 import Review from '../models/reviewModel';
 import { checkPermissions } from '../utils/checkPermissions';
 import { queryFilters } from '../utils/global';
@@ -37,7 +37,11 @@ export const retrieveAllReview = async (req: Request, res: Response) => {
     .skip(skip)
     .populate([
       { path: 'user', select: 'first_name last_name avatar' },
-      { path: 'estate', select: 'title photo contact_details location' },
+      {
+        path: 'estate',
+        select:
+          'title photo contact_details location _id taken category average_rating numOfReviews featured price description location',
+      },
     ]);
   const totalReviews = review.length;
   const numOfPages = Math.ceil(totalReviews / limit);
@@ -105,6 +109,7 @@ export const removeReview = async (req: Request, res: Response) => {
 export const retrieveEstateReviews = async (req: Request, res: Response) => {
   const { id: houseId } = req.params;
   const { page, limit, skip } = queryFilters(req);
+  const ad = await Ads.findOne({ _id: houseId });
   const reviews = await Review.find({ estate: houseId })
     .sort('-createdAt')
     .limit(limit)
@@ -115,5 +120,5 @@ export const retrieveEstateReviews = async (req: Request, res: Response) => {
     ]);
   res
     .status(StatusCodes.CREATED)
-    .json({ reviews, count: reviews.length, page });
+    .json({ ad, reviews, count: reviews.length, page });
 };

@@ -18,6 +18,7 @@ export interface UIEstateDocument extends mongoose.Document {
   average_rating: Number;
   numOfReviews: number;
   category: modalTypes;
+  taken: Boolean;
 }
 
 export interface estateDocument extends UIEstateDocument, mongoose.Document {
@@ -58,12 +59,13 @@ const estateSchema = new mongoose.Schema<estateDocument>(
     price: {
       type: Number,
       required: [true, 'Please provide price'],
-      min: 100,
+      min: 1,
     },
     featured: {
       type: Boolean,
       default: true,
     },
+    taken: { type: Boolean, default: false },
     location: {
       type: { type: String, enum: ['Point'], required: true },
       coordinates: { type: Array, index: '2dsphere', required: true },
@@ -105,10 +107,18 @@ const estateSchema = new mongoose.Schema<estateDocument>(
       required: true,
     },
   },
-  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
-estateSchema.index({ location: '2dsphere' });
+estateSchema.index(
+  { location: '2dsphere' }
+  // { location: '2dsphere', user: 1, title: 1, 'photo.0': 1 },
+  // { unique: true }
+);
 
 estateSchema.virtual('reviews', {
   ref: 'Review',
@@ -116,6 +126,31 @@ estateSchema.virtual('reviews', {
   foreignField: 'estate',
   justOne: false,
 });
+
+// estateSchema.pre('save', function (next) {
+//   const self = this;
+//   console.log(`====self====`);
+//   console.log(self);
+//   console.log(`====self====`);
+//   estateModel.findOne(
+//     {
+//       user: self.user,
+//       title: self.title,
+//       photo: self.photo,
+//     },
+//     function (err: any, existingDoc: any) {
+//       if (err) {
+//         next(err);
+//       } else if (existingDoc) {
+//         next(
+//           new Error('Document with same title, photo, and user already exists')
+//         );
+//       } else {
+//         next();
+//       }
+//     }
+//   );
+// });
 
 estateSchema.pre('deleteOne', async function (next) {
   try {
