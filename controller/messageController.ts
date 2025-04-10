@@ -7,9 +7,9 @@ import { imageUpload, queryFilters } from '../utils/global';
 
 export const sendMsg = async (req: Request, res: Response) => {
   const fileTypes: any = {
-    audio: '',
-    video: '',
-    photo: '',
+    audio: [],
+    video: [],
+    photo: [],
   };
   const files: any = req.files;
 
