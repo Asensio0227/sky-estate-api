@@ -45,25 +45,34 @@ export function imageUpload(
 ): Promise<{ url: string; id?: string }> {
   return new Promise((resolve, reject) => {
     try {
-      const uploadOptions: any = {
-        resource_type: 'auto',
+      const uploadOptions = {
+        resource_type: 'auto' as 'auto',
         overwrite: true,
         folder: 'skybank',
       };
-      cloudinary.v2.uploader
-        .upload_stream(uploadOptions, (error, result) => {
+
+      const uploadStream = cloudinary.v2.uploader.upload_stream(
+        uploadOptions,
+        (error, result) => {
+          if (error) {
+            return reject({ message: error.message || 'Upload failed' });
+          }
+
           if (result && result.secure_url) {
             const { secure_url, public_id } = result;
-            resolve({
+            return resolve({
               url: secure_url,
               id: public_id,
             });
           }
-          return reject({ message: error });
-        })
-        .end(file.buffer);
+
+          return reject({ message: 'Unknown error during upload' });
+        }
+      );
+
+      uploadStream.end(file.buffer);
     } catch (error: any) {
-      console.log(error);
+      reject({ message: error.message || 'Unexpected error during upload' });
     }
   });
 }

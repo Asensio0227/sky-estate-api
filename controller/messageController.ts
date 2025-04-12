@@ -12,21 +12,21 @@ export const sendMsg = async (req: Request, res: Response) => {
     photo: [],
   };
   const files: any = req.files;
-
   if (files) {
     for (let file of files) {
-      const { url } = await imageUpload(file);
+      const { url, id } = await imageUpload(file);
       const mimeType = file.mimetype;
+      const mediaItem = { url, id };
+
       if (mimeType.startsWith('audio/')) {
-        fileTypes.audio.push(url);
+        fileTypes.audio.push(mediaItem);
       } else if (mimeType.startsWith('video/')) {
-        fileTypes.video.push(url);
+        fileTypes.video.push(mediaItem);
       } else if (mimeType.startsWith('image/')) {
-        fileTypes.photo.push(url);
+        fileTypes.photo.push(mediaItem);
       }
     }
   }
-
   const newMsg = await Message.create({
     ...req.body,
     user: req.user?.userId,
@@ -81,7 +81,9 @@ export const updateMsg = async (req: Request, res: Response) => {
 
   if (!message)
     throw new NotFoundError(`No message with id: ${req.params.roomId}`);
-  res.status(StatusCodes.OK).json({ msg: 'Success! Message updated.' });
+  res
+    .status(StatusCodes.OK)
+    .json({ message, msg: 'Success! Message updated.' });
 };
 
 export const deleteMsg = async (req: Request, res: Response) => {
