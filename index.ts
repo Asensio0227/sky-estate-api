@@ -11,11 +11,9 @@ import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import path from 'path';
 
-import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import mongoSanitize from 'express-mongo-sanitize';
-import xss from 'express-xss-sanitizer';
 import helmet from 'helmet';
 import hpp from 'hpp';
 
@@ -42,7 +40,7 @@ cloudinary.v2.config({
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 200,
 });
 
 app.set('trust-proxy', 1);
