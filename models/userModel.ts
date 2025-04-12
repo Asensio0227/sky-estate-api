@@ -67,6 +67,7 @@ export interface UserDocument extends UIUser, mongoose.Document {
   verified: Date | number;
   createdAt: Date;
   updatedAT: Date;
+  lastSeen: Date;
   embedding_text: String;
   embedding: any;
   ComparePassword(candidatePassword: string): Promise<boolean>;
@@ -209,6 +210,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
     },
     embedding_text: String,
     embedding: { type: [Number], index: '2dsphere' },
+    lastSeen: { type: Date },
   },
   { timestamps: true }
 );

@@ -77,6 +77,7 @@ export const createTokenUser = (user: UserDocument) => {
     username: user.username,
     expoToken: user.expoToken,
     status: user.status,
+    lastSeen: user.lastSeen,
   };
 };
 

@@ -105,7 +105,7 @@ export const login = async (req: Request, res: Response) => {
 
   const user = await User.findOneAndUpdate(
     { username },
-    { status: 'online', expoToken, userAds_address },
+    { status: 'online', expoToken, userAds_address, lastSeen: new Date() },
     { new: true, runValidator: true }
   );
 
@@ -167,7 +167,6 @@ export const logout = async (req: Request, res: Response) => {
     expires: new Date(Date.now() - 1000),
     httpOnly: true,
   });
-  console.log(typeof id);
   res.status(StatusCodes.OK).json({ msg: 'logging out....' });
 };
 

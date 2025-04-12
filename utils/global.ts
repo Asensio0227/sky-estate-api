@@ -76,7 +76,6 @@ export function imageUpload(
     }
   });
 }
-
 export const checkFeaturedStatus = (ad: estateDocument) => {
   const now = new Date();
   const createdAtDate = new Date(ad.createdAt);
