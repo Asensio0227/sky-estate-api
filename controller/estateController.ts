@@ -130,7 +130,10 @@ export const retrieveAllUserAd = async (req: Request, res: Response) => {
     .sort(sortKey)
     .skip(skip)
     .limit(limit)
-    .populate({ path: 'user', select: 'username avatar' });
+    .populate({
+      path: 'user',
+      select: 'username avatar email lastSeen status',
+    });
 
   await Promise.all(
     ads.map(async (ad: estateDocument) => {
@@ -147,7 +150,7 @@ export const retrieveAllUserAd = async (req: Request, res: Response) => {
 export const retrieveAd = async (req: Request, res: Response) => {
   const ad = await Ads.findOne({ _id: req.params.id }).populate([
     'reviews',
-    { path: 'user', select: 'username avatar' },
+    { path: 'user', select: 'username avatar email status lastSeen' },
   ]);
 
   if (!ad) {

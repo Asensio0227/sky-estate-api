@@ -97,7 +97,10 @@ export async function findAds(
     .sort(sortKey)
     .skip(userSearchState.skip)
     .limit(userSearchState.limit)
-    .populate({ path: 'user', select: 'username avatar contact_details' });
+    .populate({
+      path: 'user',
+      select: 'username avatar contact_details lastSeen status',
+    });
 
   await Promise.all(
     ads.map(async (ad: estateDocument) => {

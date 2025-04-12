@@ -155,7 +155,7 @@ export const logout = async (req: Request, res: Response) => {
   const id = req.user?.userId;
   await User.findByIdAndUpdate(
     id,
-    { status: 'offline' },
+    { status: 'offline', lastSeen: new Date() },
     { new: true, runValidators: true }
   );
   await Token.findOneAndDelete({ user: id });
