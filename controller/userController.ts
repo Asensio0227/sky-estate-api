@@ -112,6 +112,7 @@ export const updateUser = async (req: Request, res: Response) => {
   if (newUser.date_of_birth) user.date_of_birth = newUser.date_of_birth;
   if (newUser.email) user.email = newUser.email;
   if (newUser.last_name) user.last_name = newUser.last_name;
+  if (newUser.lastSeen) user.lastSeen = newUser.lastSeen;
   if (newUser.first_name) user.first_name = newUser.first_name;
   if (newUser.ideaNumber) user.ideaNumber = newUser.ideaNumber;
   if (newUser.userAds_address)
