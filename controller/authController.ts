@@ -105,7 +105,7 @@ export const login = async (req: Request, res: Response) => {
 
   const user = await User.findOneAndUpdate(
     { username },
-    { status: 'online', expoToken, userAds_address, lastSeen: new Date() },
+    { status: 'online', expoToken, userAds_address, lastSeen: null },
     { new: true, runValidator: true }
   );
 
@@ -155,7 +155,7 @@ export const logout = async (req: Request, res: Response) => {
   const id = req.user?.userId;
   await User.findByIdAndUpdate(
     id,
-    { status: 'offline', lastSeen: new Date() },
+    { status: 'offline', lastSeen: new Date().toISOString() },
     { new: true, runValidators: true }
   );
   await Token.findOneAndDelete({ user: id });

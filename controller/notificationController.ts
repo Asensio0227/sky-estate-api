@@ -8,10 +8,11 @@ import { queryFilters } from '../utils/global';
 import { sendNotification } from '../utils/pushToken';
 
 export const createNotifications = async (req: Request, res: Response) => {
-  const user: UserDocument | any = await User.findOne({ _id: req.body.userId });
+  const user: UserDocument | null = await User.findById(req.body.userId);
 
-  if (!Expo.isExpoPushToken(user?.expoToken))
-    throw new UnauthorizedError('Invalid Expo token.');
+  if (!user || !Expo.isExpoPushToken(user.expoToken)) {
+    throw new UnauthorizedError('Invalid or missing Expo token.');
+  }
 
   const result = await sendNotification(req, user);
   res.status(StatusCodes.CREATED).json({ result });

@@ -1,4 +1,4 @@
-import Expo from 'expo-server-sdk';
+import Expo, { ExpoPushTicket } from 'expo-server-sdk';
 import { Request } from 'express';
 import { BadRequestError } from '../errors/custom';
 import Notification from '../models/notificationsModel';
@@ -13,23 +13,36 @@ export const sendNotification = async (req: Request, user: UserDocument) => {
   if (!Expo.isExpoPushToken(targetExpoToken)) {
     throw new BadRequestError(`Invalid Expo token: ${targetExpoToken}`);
   }
-
+  const notificationBody = getNotificationBody(message);
   const chunks = expo.chunkPushNotifications([
-    { to: targetExpoToken, sound: 'default', body: message },
+    {
+      to: targetExpoToken,
+      sound: 'default',
+      title: 'New Message',
+      body: notificationBody,
+      data: message,
+    },
   ]);
-  return await sendChunks(chunks, req, user);
+  return await sendChunks(chunks, req, user, message);
 };
 
-const sendChunks = async (chunks: any, req: Request, user: UserDocument) => {
-  const { message } = req.body;
+const sendChunks = async (
+  chunks: any,
+  req: Request,
+  user: UserDocument,
+  message: object
+) => {
   const notifications = [];
 
   for (const chunk of chunks) {
+    console.log(chunk);
     try {
-      const response: any = await expo.sendPushNotificationsAsync(chunk);
+      const response: ExpoPushTicket[] = await expo.sendPushNotificationsAsync(
+        chunk
+      );
       console.log(
         `Successfully sent push notification to ${chunk.length} devices: ${
-          response.results.filter((r: any) => !r.error).length
+          response.filter((ticket) => ticket.status === 'ok').length
         }`
       );
       const notify = await Notification.create({
@@ -42,7 +55,10 @@ const sendChunks = async (chunks: any, req: Request, user: UserDocument) => {
       });
       notifications.push(notify);
     } catch (error) {
-      console.log(`Error sending push notification to chunk: ${chunk.length}`);
+      console.log(
+        `Error sending push notification to chunk: ${chunk.length}`,
+        error
+      );
       const failedNotification = new Notification({
         expoPushToken: chunk[0].to,
         message,
@@ -52,4 +68,20 @@ const sendChunks = async (chunks: any, req: Request, user: UserDocument) => {
     }
   }
   return notifications;
+};
+
+const getNotificationBody = (message: any): string => {
+  if (message?.text && message.text.trim() !== '') {
+    return message.text;
+  }
+
+  if (Array.isArray(message.audio) && message.audio.length > 0) {
+    return '🎵 Audio message';
+  }
+
+  if (Array.isArray(message.video) && message.video.length > 0) {
+    return '📹 Video message';
+  }
+
+  return '📦 New message received';
 };

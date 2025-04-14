@@ -3,7 +3,7 @@ import { UserDocument } from './userModel';
 
 export interface INotifications extends mongoose.Document {
   expoPushToken: string;
-  message: string;
+  message: object;
   status: string;
   userId: UserDocument | any;
   createdBy: UserDocument | any;
@@ -13,7 +13,7 @@ export interface INotifications extends mongoose.Document {
 const notificationSchema = new mongoose.Schema(
   {
     expoPushToken: { type: String, require: true },
-    message: { type: String, require: true },
+    message: { type: Object, require: true },
     status: {
       type: String,
     },

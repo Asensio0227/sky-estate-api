@@ -77,8 +77,8 @@ export const updateRoom = async (req: Request, res: Response) => {
 
   for (const room of rooms?.participantsArray) {
     const user: UserDocument | any = await User.findOne({ email: room });
-    const { status, email, avatar, expoToken, username, _id } = user;
-    const part = { status, email, avatar, expoToken, username, _id };
+    const { status, email, avatar, expoToken, username, _id, lastSeen } = user;
+    const part = { status, email, avatar, expoToken, username, _id, lastSeen };
     participants.push(part);
   }
 
