@@ -1,6 +1,7 @@
 import express from 'express';
 const router = express.Router();
 
+import { createPushToken } from '../controller/expoController';
 import { authorizedPermissions } from '../middleware/authenticatedUser';
 import { upload } from '../middleware/multerMiddleware';
 import {
@@ -11,6 +12,7 @@ import {
   updatePassword,
   updateUser,
 } from './../controller/userController';
+router.post('/expo-token', createPushToken);
 
 router.get('/', getAllUsers);
 router.get('/showMe', showMeUser);

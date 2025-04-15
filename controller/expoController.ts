@@ -7,10 +7,10 @@ import User, { UserDocument } from '../models/userModel';
 export const createPushToken = async (req: Request, res: Response) => {
   const user: UserDocument | any = await User.findById(req.user?.userId);
 
-  if (!user) throw new UnauthorizedError('YInvalid user.');
+  if (!user) throw new UnauthorizedError('Invalid user.');
 
   if (!Expo.isExpoPushToken(req.body.expoToken))
-    throw new UnauthorizedError('YInvalid token.');
+    throw new UnauthorizedError('Invalid token.');
 
   user.expoToken = req.user?.expoToken;
   await user.save();
