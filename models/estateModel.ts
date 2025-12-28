@@ -19,6 +19,13 @@ export interface UIEstateDocument extends mongoose.Document {
   numOfReviews: number;
   category: modalTypes;
   taken: Boolean;
+  listingType: 'sale' | 'rent';
+  rentPrice?: number;
+  rentFrequency?: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  depositAmount?: number;
+  availableFrom?: Date;
+  isFurnished?: boolean;
+  minimumStay?: number;
 }
 
 export interface estateDocument extends UIEstateDocument, mongoose.Document {
@@ -58,7 +65,9 @@ const estateSchema = new mongoose.Schema<estateDocument>(
     },
     price: {
       type: Number,
-      required: [true, 'Please provide price'],
+      required: function (this: estateDocument) {
+        return this.listingType === 'sale';
+      },
       min: 1,
     },
     featured: {
@@ -66,6 +75,40 @@ const estateSchema = new mongoose.Schema<estateDocument>(
       default: true,
     },
     taken: { type: Boolean, default: false },
+    listingType: {
+      type: String,
+      required: [true, 'Please specify listing type'],
+      enum: ['sale', 'rent'],
+      default: 'sale',
+    },
+    rentPrice: {
+      type: Number,
+      required: function (this: estateDocument) {
+        return this.listingType === 'rent';
+      },
+      min: 1,
+    },
+    rentFrequency: {
+      type: String,
+      required: function (this: estateDocument) {
+        return this.listingType === 'rent';
+      },
+      enum: ['daily', 'weekly', 'monthly', 'yearly'],
+    },
+    depositAmount: {
+      type: Number,
+      min: 0,
+    },
+    availableFrom: {
+      type: Date,
+    },
+    isFurnished: {
+      type: Boolean,
+    },
+    minimumStay: {
+      type: Number,
+      min: 1,
+    },
     location: {
       type: { type: String, enum: ['Point'], required: true },
       coordinates: { type: Array, index: '2dsphere', required: true },

@@ -116,7 +116,10 @@ export const updateUser = async (req: Request, res: Response) => {
   if (newUser.first_name) user.first_name = newUser.first_name;
   if (newUser.ideaNumber) user.ideaNumber = newUser.ideaNumber;
   if (newUser.userAds_address)
-    user.userAds_address = JSON.parse(newUser.userAds_address);
+    user.userAds_address =
+      typeof newUser.userAds_address === 'string'
+        ? JSON.parse(newUser.userAds_address)
+        : newUser.userAds_address;
 
   if (newUser.physical_address) {
     const { physical_address } = newUser;
@@ -179,4 +182,43 @@ export const updatePassword = async (req: Request, res: Response) => {
   res
     .status(StatusCodes.OK)
     .json({ user, msg: 'Password updated successfully.' });
+};
+
+export const updateLocation = async (req: Request, res: Response) => {
+  const { latitude, longitude } = req.body;
+  const userId = req.user?.userId;
+
+  const user = await User.findById(userId);
+  if (!user) throw new NotFoundError('User not found');
+
+  user.currentLocation = {
+    type: 'Point',
+    coordinates: [longitude, latitude],
+  };
+
+  await user.save();
+
+  res
+    .status(StatusCodes.OK)
+    .json({ msg: 'Location updated successfully', user });
+};
+
+export const updateManualLocation = async (req: Request, res: Response) => {
+  const { latitude, longitude } = req.body;
+  const userId = req.user?.userId;
+
+  const user = await User.findById(userId);
+  if (!user) throw new NotFoundError('User not found');
+
+  // Manual override, same as updateLocation for now
+  user.currentLocation = {
+    type: 'Point',
+    coordinates: [longitude, latitude],
+  };
+
+  await user.save();
+
+  res
+    .status(StatusCodes.OK)
+    .json({ msg: 'Manual location updated successfully', user });
 };

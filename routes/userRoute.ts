@@ -9,6 +9,8 @@ import {
   getAllUsers,
   getSingleUser,
   showMeUser,
+  updateLocation,
+  updateManualLocation,
   updatePassword,
   updateUser,
 } from './../controller/userController';
@@ -17,6 +19,8 @@ router.post('/expo-token', createPushToken);
 router.get('/', getAllUsers);
 router.get('/showMe', showMeUser);
 router.put('/update-user', upload.single('avatar'), updateUser);
+router.patch('/location', updateLocation);
+router.patch('/manual-location', updateManualLocation);
 router.put(
   '/:id',
   authorizedPermissions('admin', 'assistant', 'member'),

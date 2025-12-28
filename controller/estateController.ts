@@ -16,7 +16,13 @@ export const createAd = async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   req.body.user = userId;
   const numericPrice = Number(req.body.price);
-  const parsedLocation = JSON.parse(req.body.location);
+  const numericRentPrice = req.body.rentPrice
+    ? Number(req.body.rentPrice)
+    : undefined;
+  const parsedLocation =
+    typeof req.body.location === 'string'
+      ? JSON.parse(req.body.location)
+      : req.body.location;
   let uris = [];
   const files: any = req.files;
 
@@ -32,7 +38,8 @@ export const createAd = async (req: Request, res: Response) => {
   if (user)
     req.body.contact_details = { ...details, ...req.body.contact_details };
   if (uris.length > 0) req.body.photo = uris;
-  req.body.price = numericPrice;
+  if (req.body.price) req.body.price = numericPrice;
+  if (req.body.rentPrice) req.body.rentPrice = numericRentPrice;
   req.body.location = parsedLocation;
   const ads = await Ads.create({ ...req.body });
 
@@ -163,7 +170,10 @@ export const retrieveAd = async (req: Request, res: Response) => {
 export const updateAd = async (req: Request, res: Response) => {
   const newAd = { ...req.body };
   const id = req.params.id;
-  const numericPrice = Number(req.body.price);
+  const numericPrice = newAd.price ? Number(newAd.price) : undefined;
+  const numericRentPrice = newAd.rentPrice
+    ? Number(newAd.rentPrice)
+    : undefined;
   const ad = await Ads.findOne({ _id: id });
   if (!ad) {
     throw new NotFoundError(`No ad with id : ${req.params.id}`);
@@ -187,12 +197,22 @@ export const updateAd = async (req: Request, res: Response) => {
 
   if (uris.length > 0) ad.photo = uris;
   if (newAd.location) {
-    ad.location = JSON.parse(newAd.location);
+    ad.location =
+      typeof newAd.location === 'string'
+        ? JSON.parse(newAd.location)
+        : newAd.location;
   }
   if (newAd.title) ad.title = newAd.title;
   if (newAd.description) ad.description = newAd.description;
-  if (newAd.price) ad.price = numericPrice;
-  if (newAd.taken) ad.taken = newAd.taken;
+  if (numericPrice !== undefined) ad.price = numericPrice;
+  if (numericRentPrice !== undefined) ad.rentPrice = numericRentPrice;
+  if (newAd.rentFrequency) ad.rentFrequency = newAd.rentFrequency;
+  if (newAd.depositAmount !== undefined) ad.depositAmount = newAd.depositAmount;
+  if (newAd.availableFrom) ad.availableFrom = new Date(newAd.availableFrom);
+  if (newAd.isFurnished !== undefined) ad.isFurnished = newAd.isFurnished;
+  if (newAd.minimumStay !== undefined) ad.minimumStay = newAd.minimumStay;
+  if (newAd.listingType) ad.listingType = newAd.listingType;
+  if (newAd.taken !== undefined) ad.taken = newAd.taken;
   if (newAd.category) ad.category = newAd.category;
   await ad.save();
 
@@ -221,4 +241,208 @@ export const markAsTaken = async (req: Request, res: Response) => {
   ad.taken = !ad.taken;
   await ad.save();
   res.status(StatusCodes.OK).json({ msg: 'Success!', ad });
+};
+
+export const getRentals = async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+  const user = await User.findOne({ _id: userId });
+  if (!user) throw new NotFoundError('User not found');
+
+  const userLocation =
+    user.currentLocation?.coordinates || user.userAds_address.coordinates;
+  const { distance = 10, page = 1, limit = 20 } = req.query;
+
+  const pipeline = [
+    {
+      $geoNear: {
+        near: {
+          type: 'Point',
+          coordinates: userLocation,
+        },
+        distanceField: 'distance',
+        maxDistance: Number(distance) * 1000,
+        spherical: true,
+      },
+    },
+    {
+      $match: {
+        listingType: 'rent',
+        taken: false,
+      },
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'user',
+        pipeline: [{ $project: { username: 1, avatar: 1 } }],
+      },
+    },
+    {
+      $unwind: '$user',
+    },
+    {
+      $facet: {
+        ads: [
+          { $skip: (Number(page) - 1) * Number(limit) },
+          { $limit: Number(limit) },
+        ],
+        total: [{ $count: 'count' }],
+      },
+    },
+  ];
+
+  const result = await Ads.aggregate(pipeline as any[]);
+
+  const ads = result[0]?.ads || [];
+  const total = result[0]?.total[0]?.count || 0;
+  const numOfPages = Math.ceil(total / Number(limit));
+
+  res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
+};
+
+export const getNearbyEstates = async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+  const user = await User.findOne({ _id: userId });
+  if (!user) throw new NotFoundError('User not found');
+
+  const userLocation =
+    user.currentLocation?.coordinates || user.userAds_address.coordinates;
+  const { distance = 10, page = 1, limit = 20 } = req.query;
+
+  const pipeline = [
+    {
+      $geoNear: {
+        near: {
+          type: 'Point',
+          coordinates: userLocation,
+        },
+        distanceField: 'distance',
+        maxDistance: Number(distance) * 1000,
+        spherical: true,
+      },
+    },
+    {
+      $match: {
+        taken: false,
+      },
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'user',
+        pipeline: [{ $project: { username: 1, avatar: 1 } }],
+      },
+    },
+    {
+      $unwind: '$user',
+    },
+    {
+      $facet: {
+        ads: [
+          { $skip: (Number(page) - 1) * Number(limit) },
+          { $limit: Number(limit) },
+        ],
+        total: [{ $count: 'count' }],
+      },
+    },
+  ];
+
+  const result = await Ads.aggregate(pipeline as any[]);
+
+  const ads = result[0]?.ads || [];
+  const total = result[0]?.total[0]?.count || 0;
+  const numOfPages = Math.ceil(total / Number(limit));
+
+  res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
+};
+
+export const searchEstates = async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+  const user = await User.findOne({ _id: userId });
+  if (!user) throw new NotFoundError('User not found');
+
+  const {
+    listingType,
+    minPrice,
+    maxPrice,
+    rentFrequency,
+    isFurnished,
+    availableFrom,
+    distance = 10,
+    latitude,
+    longitude,
+    page = 1,
+    limit = 20,
+  } = req.query;
+
+  const userLocation =
+    latitude && longitude
+      ? [Number(longitude), Number(latitude)]
+      : user.currentLocation?.coordinates || user.userAds_address.coordinates;
+
+  // Build match conditions
+  let matchConditions: any = { taken: false };
+
+  if (listingType) matchConditions.listingType = listingType;
+  if (minPrice || maxPrice) {
+    const priceField = listingType === 'rent' ? 'rentPrice' : 'price';
+    matchConditions[priceField] = {};
+    if (minPrice) matchConditions[priceField].$gte = Number(minPrice);
+    if (maxPrice) matchConditions[priceField].$lte = Number(maxPrice);
+  }
+  if (rentFrequency) matchConditions.rentFrequency = rentFrequency;
+  if (isFurnished !== undefined)
+    matchConditions.isFurnished = isFurnished === 'true';
+  if (availableFrom)
+    matchConditions.availableFrom = { $lte: new Date(availableFrom as string) };
+
+  const pipeline = [
+    {
+      $geoNear: {
+        near: {
+          type: 'Point',
+          coordinates: userLocation,
+        },
+        distanceField: 'distance',
+        maxDistance: Number(distance) * 1000,
+        spherical: true,
+      },
+    },
+    {
+      $match: matchConditions,
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'user',
+        pipeline: [{ $project: { username: 1, avatar: 1 } }],
+      },
+    },
+    {
+      $unwind: '$user',
+    },
+    {
+      $facet: {
+        ads: [
+          { $skip: (Number(page) - 1) * Number(limit) },
+          { $limit: Number(limit) },
+        ],
+        total: [{ $count: 'count' }],
+      },
+    },
+  ];
+
+  const result = await Ads.aggregate(pipeline as any[]);
+
+  const ads = result[0]?.ads || [];
+  const total = result[0]?.total[0]?.count || 0;
+  const numOfPages = Math.ceil(total / Number(limit));
+
+  res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
 };

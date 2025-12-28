@@ -38,13 +38,15 @@ cloudinary.v2.config({
   secure: true,
 });
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
+const geoLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // limit each IP to 50 requests per windowMs
+  message: 'Too many geo-search requests, please try again later.',
 });
 
-app.set('trust-proxy', 1);
-app.use(limiter);
+app.use('/api/v1/estate/rent', geoLimiter);
+app.use('/api/v1/estate/nearby', geoLimiter);
+app.use('/api/v1/estate/search', geoLimiter);
 
 if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));

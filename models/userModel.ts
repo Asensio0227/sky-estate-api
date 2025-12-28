@@ -70,6 +70,7 @@ export interface UserDocument extends UIUser, mongoose.Document {
   lastSeen: Date;
   embedding_text: String;
   embedding: any;
+  currentLocation?: Location;
   ComparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -211,6 +212,10 @@ const userSchema = new mongoose.Schema<UserDocument>(
     embedding_text: String,
     embedding: { type: [Number], index: '2dsphere' },
     lastSeen: { type: Date },
+    currentLocation: {
+      type: { type: String, enum: ['Point'] },
+      coordinates: { type: [Number], index: '2dsphere' },
+    },
   },
   { timestamps: true }
 );
@@ -220,6 +225,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
 //   { name: 'vector_index' }
 // );
 userSchema.index({ userAds_address: '2dsphere' });
+userSchema.index({ currentLocation: '2dsphere' });
 
 userSchema.pre('save', async function (this: UserDocument) {
   if (!this.isModified('password')) return;
