@@ -1,7 +1,7 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, RequestHandler, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { BadRequestError, NotFoundError } from '../errors/custom';
-import Ads, { estateDocument } from '../models/estateModel';
+import Ads, { estateDocument, UIEstateDocument } from '../models/estateModel';
 import User from '../models/userModel';
 import {
   checkFeaturedStatus,
@@ -19,16 +19,38 @@ export const createAd = async (req: Request, res: Response) => {
   const numericRentPrice = req.body.rentPrice
     ? Number(req.body.rentPrice)
     : undefined;
-  const parsedLocation =
-    typeof req.body.location === 'string'
-      ? JSON.parse(req.body.location)
-      : req.body.location;
+  let parsedLocation = req.body.location;
+  console.log(`====create ad for houses===`);
+  console.log(req.body);
+  console.log(`====create ad for houses===`);
+  if (req.body.location) {
+    if (typeof req.body.location === 'string') {
+      if (
+        req.body.location !== 'undefined' &&
+        req.body.location !== '[object Object]'
+      ) {
+        try {
+          parsedLocation = JSON.parse(req.body.location);
+        } catch (error) {
+          throw new BadRequestError('Invalid location format');
+        }
+      }
+    } else if (typeof req.body.location === 'object') {
+      parsedLocation = req.body.location;
+    }
+  }
   let uris = [];
   const files: any = req.files;
+  console.log(`====create ad for houses==req.files===`);
+  console.log(req.files);
+  console.log(`====create ad for houses===req.files==`);
 
   if (files) {
     for (const file of files) {
       const url = await imageUpload(file);
+      console.log(`====create ad for houses==url===`);
+      console.log(url);
+      console.log(`====create ad for houses===url==`);
       uris.push(url);
     }
   }
@@ -80,7 +102,8 @@ export const retrieveAllAd = async (req: Request, res: Response) => {
     queryObj = {
       location: {
         $geoWithin: {
-          $centerSphere: [userLocation, 50 / 6378.1], // Radius in radians (50 km)
+          $centerSphere: [userLocation, 50 / 6378.1],
+          key: 'location',
         },
       },
     };
@@ -197,10 +220,20 @@ export const updateAd = async (req: Request, res: Response) => {
 
   if (uris.length > 0) ad.photo = uris;
   if (newAd.location) {
-    ad.location =
-      typeof newAd.location === 'string'
-        ? JSON.parse(newAd.location)
-        : newAd.location;
+    let parsedLocation = newAd.location;
+    if (typeof newAd.location === 'string') {
+      if (
+        newAd.location !== 'undefined' &&
+        newAd.location !== '[object Object]'
+      ) {
+        try {
+          parsedLocation = JSON.parse(newAd.location);
+        } catch (error) {
+          throw new BadRequestError('Invalid location format');
+        }
+      }
+    }
+    ad.location = parsedLocation;
   }
   if (newAd.title) ad.title = newAd.title;
   if (newAd.description) ad.description = newAd.description;
@@ -242,207 +275,736 @@ export const markAsTaken = async (req: Request, res: Response) => {
   await ad.save();
   res.status(StatusCodes.OK).json({ msg: 'Success!', ad });
 };
+const getAllEstates = async (
+  page: number,
+  limit: number,
+  matchConditions: any = {}
+) => {
+  const skip = (Number(page) - 1) * Number(limit);
 
-export const getRentals = async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
-  const user = await User.findOne({ _id: userId });
-  if (!user) throw new NotFoundError('User not found');
+  const baseQuery = { taken: false, ...matchConditions };
 
-  const userLocation =
-    user.currentLocation?.coordinates || user.userAds_address.coordinates;
-  const { distance = 10, page = 1, limit = 20 } = req.query;
+  const ads = await Ads.find(baseQuery)
+    .sort('-createdAt')
+    .skip(skip)
+    .limit(Number(limit))
+    .populate({
+      path: 'user',
+      select: 'username avatar email lastSeen status',
+    })
+    .lean();
 
-  const pipeline = [
-    {
-      $geoNear: {
-        near: {
-          type: 'Point',
-          coordinates: userLocation,
-        },
-        distanceField: 'distance',
-        maxDistance: Number(distance) * 1000,
-        spherical: true,
-      },
-    },
-    {
-      $match: {
-        listingType: 'rent',
-        taken: false,
-      },
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'user',
-        foreignField: '_id',
-        as: 'user',
-        pipeline: [{ $project: { username: 1, avatar: 1 } }],
-      },
-    },
-    {
-      $unwind: '$user',
-    },
-    {
-      $facet: {
-        ads: [
-          { $skip: (Number(page) - 1) * Number(limit) },
-          { $limit: Number(limit) },
-        ],
-        total: [{ $count: 'count' }],
-      },
-    },
-  ];
-
-  const result = await Ads.aggregate(pipeline as any[]);
-
-  const ads = result[0]?.ads || [];
-  const total = result[0]?.total[0]?.count || 0;
+  const total = await Ads.countDocuments(baseQuery);
   const numOfPages = Math.ceil(total / Number(limit));
 
-  res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
+  return { ads, total, numOfPages };
 };
 
-export const getNearbyEstates = async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
-  const user = await User.findOne({ _id: userId });
-  if (!user) throw new NotFoundError('User not found');
+// Helper function to validate coordinates
+const isValidCoordinates = (coordinates: number[]): boolean => {
+  if (!Array.isArray(coordinates) || coordinates.length !== 2) {
+    return false;
+  }
+  const [longitude, latitude] = coordinates;
+  return (
+    typeof longitude === 'number' &&
+    typeof latitude === 'number' &&
+    longitude >= -180 &&
+    longitude <= 180 &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    !isNaN(longitude) &&
+    !isNaN(latitude)
+  );
+};
 
-  const userLocation =
-    user.currentLocation?.coordinates || user.userAds_address.coordinates;
-  const { distance = 10, page = 1, limit = 20 } = req.query;
+// export const getNearbyEstates = async (req: Request, res: Response) => {
+//   try {
+//     const userId = req.user?.userId;
+//     const user = await User.findOne({ _id: userId });
 
-  const pipeline = [
-    {
-      $geoNear: {
-        near: {
-          type: 'Point',
-          coordinates: userLocation,
+//     if (!user) {
+//       throw new NotFoundError('User not found');
+//     }
+
+//     const {
+//       distance = 10,
+//       page = 1,
+//       limit = 20,
+//       listingType,
+//       minPrice,
+//       maxPrice,
+//       furnished,
+//       bedrooms,
+//       bathrooms,
+//     } = req.query;
+
+//     // Try to get valid user location
+//     let userLocation =
+//       user.currentLocation?.coordinates || user.userAds_address?.coordinates;
+
+//     // Validate coordinates
+//     const hasValidLocation = userLocation && isValidCoordinates(userLocation);
+
+//     // Build match conditions for filters
+//     let matchConditions: any = { taken: false };
+
+//     if (listingType) {
+//       matchConditions.listingType = listingType;
+//     }
+
+//     if (minPrice || maxPrice) {
+//       const priceField = listingType === 'rent' ? 'rentPrice' : 'price';
+//       matchConditions[priceField] = {};
+//       if (minPrice) matchConditions[priceField].$gte = Number(minPrice);
+//       if (maxPrice) matchConditions[priceField].$lte = Number(maxPrice);
+//     }
+
+//     if (furnished !== undefined) {
+//       matchConditions.isFurnished = furnished === 'true';
+//     }
+
+//     if (bedrooms) {
+//       matchConditions.bedrooms = Number(bedrooms);
+//     }
+
+//     if (bathrooms) {
+//       matchConditions.bathrooms = Number(bathrooms);
+//     }
+
+//     let ads: any[] = [];
+//     let total = 0;
+//     let numOfPages = 0;
+
+//     // If we have valid location, try geo query first
+//     if (hasValidLocation) {
+//       const pipeline = [
+//         {
+//           $geoNear: {
+//             near: {
+//               type: 'Point',
+//               coordinates: userLocation,
+//             },
+//             distanceField: 'distance',
+//             maxDistance: Number(distance) * 1000, // Convert km to meters
+//             spherical: true,
+//             key: 'location',
+//           },
+//         },
+//         {
+//           $match: matchConditions,
+//         },
+//         {
+//           $lookup: {
+//             from: 'users',
+//             localField: 'user',
+//             foreignField: '_id',
+//             as: 'user',
+//             pipeline: [
+//               {
+//                 $project: {
+//                   username: 1,
+//                   avatar: 1,
+//                   email: 1,
+//                   lastSeen: 1,
+//                   status: 1,
+//                 },
+//               },
+//             ],
+//           },
+//         },
+//         {
+//           $unwind: '$user',
+//         },
+//         {
+//           $facet: {
+//             ads: [
+//               { $skip: (Number(page) - 1) * Number(limit) },
+//               { $limit: Number(limit) },
+//             ],
+//             total: [{ $count: 'count' }],
+//           },
+//         },
+//       ];
+
+//       try {
+//         const result = await Ads.aggregate(pipeline as any[]);
+//         ads = result[0]?.ads || [];
+//         total = result[0]?.total[0]?.count || 0;
+//         numOfPages = Math.ceil(total / Number(limit));
+//       } catch (geoError) {
+//         console.error('Geo query failed:', geoError);
+//         // Will fall through to fallback
+//       }
+//     }
+
+//     // Fallback: If no nearby estates found or no valid location, fetch all estates with filters
+//     if (ads.length === 0) {
+//       const fallbackData = await getAllEstates(
+//         Number(page),
+//         Number(limit),
+//         matchConditions
+//       );
+//       ads = fallbackData.ads;
+//       total = fallbackData.total;
+//       numOfPages = fallbackData.numOfPages;
+//     }
+
+//     res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
+//   } catch (error) {
+//     console.error('Error in getNearbyEstates:', error);
+//     throw error;
+//   }
+// };
+
+export const getRentals = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const user = await User.findOne({ _id: userId });
+    if (!user) throw new NotFoundError('User not found');
+
+    const {
+      distance = 10,
+      page = 1,
+      limit = 20,
+      minPrice,
+      maxPrice,
+      furnished,
+      bedrooms,
+      bathrooms,
+    } = req.query;
+
+    // Try to get valid user location
+    let userLocation =
+      user.currentLocation?.coordinates || user.userAds_address?.coordinates;
+    const hasValidLocation = userLocation && isValidCoordinates(userLocation);
+
+    // Build match conditions
+    let matchConditions: any = {
+      listingType: 'rent',
+      taken: false,
+    };
+
+    if (minPrice || maxPrice) {
+      matchConditions.rentPrice = {};
+      if (minPrice) matchConditions.rentPrice.$gte = Number(minPrice);
+      if (maxPrice) matchConditions.rentPrice.$lte = Number(maxPrice);
+    }
+
+    if (furnished !== undefined) {
+      matchConditions.isFurnished = furnished === 'true';
+    }
+
+    if (bedrooms) matchConditions.bedrooms = Number(bedrooms);
+    if (bathrooms) matchConditions.bathrooms = Number(bathrooms);
+
+    let ads: any[] = [];
+    let total = 0;
+    let numOfPages = 0;
+
+    // If we have valid location, try geo query first
+    if (hasValidLocation) {
+      const pipeline = [
+        {
+          $geoNear: {
+            near: {
+              type: 'Point',
+              coordinates: userLocation,
+            },
+            distanceField: 'distance',
+            maxDistance: Number(distance) * 1000,
+            spherical: true,
+            key: 'location',
+          },
         },
-        distanceField: 'distance',
-        maxDistance: Number(distance) * 1000,
-        spherical: true,
-      },
-    },
-    {
-      $match: {
-        taken: false,
-      },
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'user',
-        foreignField: '_id',
-        as: 'user',
-        pipeline: [{ $project: { username: 1, avatar: 1 } }],
-      },
-    },
-    {
-      $unwind: '$user',
-    },
-    {
-      $facet: {
-        ads: [
-          { $skip: (Number(page) - 1) * Number(limit) },
-          { $limit: Number(limit) },
-        ],
-        total: [{ $count: 'count' }],
-      },
-    },
-  ];
+        {
+          $match: matchConditions,
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user',
+            foreignField: '_id',
+            as: 'user',
+            pipeline: [
+              {
+                $project: {
+                  username: 1,
+                  avatar: 1,
+                  email: 1,
+                  lastSeen: 1,
+                  status: 1,
+                },
+              },
+            ],
+          },
+        },
+        {
+          $unwind: '$user',
+        },
+        {
+          $facet: {
+            ads: [
+              { $skip: (Number(page) - 1) * Number(limit) },
+              { $limit: Number(limit) },
+            ],
+            total: [{ $count: 'count' }],
+          },
+        },
+      ];
 
-  const result = await Ads.aggregate(pipeline as any[]);
+      try {
+        const result = await Ads.aggregate(pipeline as any[]);
+        ads = result[0]?.ads || [];
+        total = result[0]?.total[0]?.count || 0;
+        numOfPages = Math.ceil(total / Number(limit));
+      } catch (geoError) {
+        console.error('Geo query failed for rentals:', geoError);
+      }
+    }
 
-  const ads = result[0]?.ads || [];
-  const total = result[0]?.total[0]?.count || 0;
-  const numOfPages = Math.ceil(total / Number(limit));
+    // Fallback: fetch all rentals with filters
+    if (ads.length === 0) {
+      const fallbackData = await getAllEstates(
+        Number(page),
+        Number(limit),
+        matchConditions
+      );
+      ads = fallbackData.ads;
+      total = fallbackData.total;
+      numOfPages = fallbackData.numOfPages;
+    }
 
-  res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
+    res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
+  } catch (error) {
+    console.error('Error in getRentals:', error);
+    throw error;
+  }
 };
 
 export const searchEstates = async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
-  const user = await User.findOne({ _id: userId });
-  if (!user) throw new NotFoundError('User not found');
+  try {
+    const userId = req.user?.userId;
+    const user = await User.findOne({ _id: userId });
+    if (!user) throw new NotFoundError('User not found');
 
-  const {
-    listingType,
-    minPrice,
-    maxPrice,
-    rentFrequency,
-    isFurnished,
-    availableFrom,
-    distance = 10,
-    latitude,
-    longitude,
-    page = 1,
-    limit = 20,
-  } = req.query;
+    const {
+      listingType,
+      minPrice,
+      maxPrice,
+      rentFrequency,
+      isFurnished,
+      availableFrom,
+      distance = 10,
+      latitude,
+      longitude,
+      page = 1,
+      limit = 20,
+      bedrooms,
+      bathrooms,
+    } = req.query;
 
-  const userLocation =
-    latitude && longitude
-      ? [Number(longitude), Number(latitude)]
-      : user.currentLocation?.coordinates || user.userAds_address.coordinates;
+    // Determine location to use
+    let userLocation: number[] | undefined;
 
-  // Build match conditions
-  let matchConditions: any = { taken: false };
+    if (latitude && longitude) {
+      const coords = [Number(longitude), Number(latitude)];
+      if (isValidCoordinates(coords)) {
+        userLocation = coords;
+      }
+    }
 
-  if (listingType) matchConditions.listingType = listingType;
-  if (minPrice || maxPrice) {
-    const priceField = listingType === 'rent' ? 'rentPrice' : 'price';
-    matchConditions[priceField] = {};
-    if (minPrice) matchConditions[priceField].$gte = Number(minPrice);
-    if (maxPrice) matchConditions[priceField].$lte = Number(maxPrice);
-  }
-  if (rentFrequency) matchConditions.rentFrequency = rentFrequency;
-  if (isFurnished !== undefined)
-    matchConditions.isFurnished = isFurnished === 'true';
-  if (availableFrom)
-    matchConditions.availableFrom = { $lte: new Date(availableFrom as string) };
+    if (!userLocation) {
+      userLocation =
+        user.currentLocation?.coordinates || user.userAds_address?.coordinates;
+    }
 
-  const pipeline = [
-    {
-      $geoNear: {
-        near: {
-          type: 'Point',
-          coordinates: userLocation,
+    const hasValidLocation = userLocation && isValidCoordinates(userLocation);
+
+    // Build match conditions
+    let matchConditions: any = { taken: false };
+
+    if (listingType) matchConditions.listingType = listingType;
+
+    if (minPrice || maxPrice) {
+      const priceField = listingType === 'rent' ? 'rentPrice' : 'price';
+      matchConditions[priceField] = {};
+      if (minPrice) matchConditions[priceField].$gte = Number(minPrice);
+      if (maxPrice) matchConditions[priceField].$lte = Number(maxPrice);
+    }
+
+    if (rentFrequency) matchConditions.rentFrequency = rentFrequency;
+    if (isFurnished !== undefined)
+      matchConditions.isFurnished = isFurnished === 'true';
+    if (availableFrom)
+      matchConditions.availableFrom = {
+        $lte: new Date(availableFrom as string),
+      };
+    if (bedrooms) matchConditions.bedrooms = Number(bedrooms);
+    if (bathrooms) matchConditions.bathrooms = Number(bathrooms);
+
+    let ads: any[] = [];
+    let total = 0;
+    let numOfPages = 0;
+
+    // If we have valid location, try geo query first
+    if (hasValidLocation) {
+      const pipeline = [
+        {
+          $geoNear: {
+            near: {
+              type: 'Point',
+              coordinates: userLocation,
+            },
+            distanceField: 'distance',
+            maxDistance: Number(distance) * 1000,
+            spherical: true,
+            key: 'location',
+          },
         },
-        distanceField: 'distance',
-        maxDistance: Number(distance) * 1000,
-        spherical: true,
-      },
-    },
-    {
-      $match: matchConditions,
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'user',
-        foreignField: '_id',
-        as: 'user',
-        pipeline: [{ $project: { username: 1, avatar: 1 } }],
-      },
-    },
-    {
-      $unwind: '$user',
-    },
-    {
-      $facet: {
-        ads: [
-          { $skip: (Number(page) - 1) * Number(limit) },
-          { $limit: Number(limit) },
-        ],
-        total: [{ $count: 'count' }],
-      },
-    },
-  ];
+        {
+          $match: matchConditions,
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user',
+            foreignField: '_id',
+            as: 'user',
+            pipeline: [
+              {
+                $project: {
+                  username: 1,
+                  avatar: 1,
+                  email: 1,
+                  lastSeen: 1,
+                  status: 1,
+                },
+              },
+            ],
+          },
+        },
+        {
+          $unwind: '$user',
+        },
+        {
+          $facet: {
+            ads: [
+              { $skip: (Number(page) - 1) * Number(limit) },
+              { $limit: Number(limit) },
+            ],
+            total: [{ $count: 'count' }],
+          },
+        },
+      ];
 
-  const result = await Ads.aggregate(pipeline as any[]);
+      try {
+        const result = await Ads.aggregate(pipeline as any[]);
+        ads = result[0]?.ads || [];
+        total = result[0]?.total[0]?.count || 0;
+        numOfPages = Math.ceil(total / Number(limit));
+      } catch (geoError) {
+        console.error('Geo query failed for search:', geoError);
+      }
+    }
 
-  const ads = result[0]?.ads || [];
-  const total = result[0]?.total[0]?.count || 0;
-  const numOfPages = Math.ceil(total / Number(limit));
+    // Fallback: fetch all estates matching filters without location constraint
+    if (ads.length === 0) {
+      const fallbackData = await getAllEstates(
+        Number(page),
+        Number(limit),
+        matchConditions
+      );
+      ads = fallbackData.ads;
+      total = fallbackData.total;
+      numOfPages = fallbackData.numOfPages;
+    }
 
-  res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
+    res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
+  } catch (error) {
+    console.error('Error in searchEstates:', error);
+    throw error;
+  }
+};
+
+// ============================================
+// COMPLETE getNearbyEstates FUNCTION
+// ============================================
+export const getNearbyEstates = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const user = await User.findOne({ _id: userId });
+
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    const {
+      distance = 10,
+      page = 1,
+      limit = 20,
+      listingType,
+      minPrice,
+      maxPrice,
+      furnished,
+      bedrooms,
+      bathrooms,
+      fetchMode = 'nearby',
+    } = req.query;
+    // Try to get valid user location
+    let userLocation =
+      user.currentLocation?.coordinates || user.userAds_address?.coordinates;
+    // Validate coordinates
+    const hasValidLocation = userLocation && isValidCoordinates(userLocation);
+    // Build match conditions for filters
+    let matchConditions: any = { taken: false };
+
+    // ✅ Only filter by listingType if it's not 'all'
+    if (listingType && listingType !== 'all') {
+      matchConditions.listingType = listingType;
+    }
+
+    if (minPrice || maxPrice) {
+      const priceField = listingType === 'rent' ? 'rentPrice' : 'price';
+      matchConditions[priceField] = {};
+      if (minPrice) matchConditions[priceField].$gte = Number(minPrice);
+      if (maxPrice) matchConditions[priceField].$lte = Number(maxPrice);
+    }
+
+    if (furnished !== undefined) {
+      matchConditions.isFurnished = furnished === 'true';
+    }
+
+    if (bedrooms) {
+      matchConditions.bedrooms = Number(bedrooms);
+    }
+
+    if (bathrooms) {
+      matchConditions.bathrooms = Number(bathrooms);
+    }
+    // ✅ ADD: Count total properties for debugging
+    const totalInDb = await Ads.countDocuments({ taken: false });
+    const totalMatchingFilter = await Ads.countDocuments(matchConditions);
+    let ads: any[] = [];
+    let total = 0;
+    let numOfPages = 0;
+    let isNearbyData = false;
+    let hasMoreNearby = false;
+
+    // CRITICAL: Only try geo query if fetchMode is 'nearby' AND we have valid location
+    if (fetchMode === 'nearby' && hasValidLocation) {
+      const pipeline = [
+        {
+          $geoNear: {
+            near: {
+              type: 'Point',
+              coordinates: userLocation,
+            },
+            distanceField: 'distance',
+            maxDistance: Number(distance) * 1000, // Convert km to meters
+            spherical: true,
+            key: 'location',
+          },
+        },
+        {
+          $match: matchConditions,
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user',
+            foreignField: '_id',
+            as: 'user',
+            pipeline: [
+              {
+                $project: {
+                  username: 1,
+                  avatar: 1,
+                  email: 1,
+                  lastSeen: 1,
+                  status: 1,
+                },
+              },
+            ],
+          },
+        },
+        {
+          $unwind: '$user',
+        },
+        {
+          $facet: {
+            ads: [
+              { $skip: (Number(page) - 1) * Number(limit) },
+              { $limit: Number(limit) },
+            ],
+            total: [{ $count: 'count' }],
+          },
+        },
+      ];
+
+      try {
+        const result = await Ads.aggregate(pipeline as any[]);
+        ads = result[0]?.ads || [];
+        total = result[0]?.total[0]?.count || 0;
+        numOfPages = Math.ceil(total / Number(limit));
+        if (ads.length > 0) {
+          isNearbyData = true;
+          hasMoreNearby = Number(page) < numOfPages;
+        } else {
+          // console.log('⚠️ No properties found within', distance, 'km radius');
+        }
+      } catch (geoError) {
+        console.error('❌ Geo query failed:', geoError);
+        // Will fall through to fallback
+      }
+    } else {
+      console.log(
+        '🌍 Skipping NEARBY - fetchMode:',
+        fetchMode,
+        'hasLocation:',
+        hasValidLocation
+      );
+    }
+
+    // Fetch all estates if:
+    // 1. fetchMode is 'all', OR
+    // 2. No nearby estates found in 'nearby' mode
+    if (fetchMode === 'all' || (fetchMode === 'nearby' && ads.length === 0)) {
+      const fallbackData = await getAllEstates(
+        Number(page),
+        Number(limit),
+        matchConditions
+      );
+
+      ads = fallbackData.ads;
+      total = fallbackData.total;
+      numOfPages = fallbackData.numOfPages;
+      isNearbyData = false;
+      hasMoreNearby = false;
+    }
+
+    const response = {
+      ads,
+      total,
+      numOfPages,
+      page: Number(page),
+      isNearbyData, // Indicates if data is from nearby search
+      hasMoreNearby, // Indicates if there are more nearby results
+    };
+    res.status(StatusCodes.OK).json(response);
+  } catch (error) {
+    console.error('❌ Error in getNearbyEstates:', error);
+    throw error;
+  }
+};
+
+// ============================================
+// ATOMIC INCREMENT AD VIEW
+// ============================================
+export const incrementAdView = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id: estateId } = req.params;
+    const userId = (req as any).user?.userId;
+
+    // If no userId (guest or unauthenticated), just return current view count
+    if (!userId) {
+      const estate = await Ads.findById(estateId).select('viewsCount');
+      if (!estate) {
+        throw new NotFoundError('Estate not found');
+      }
+      res.status(StatusCodes.OK).json({ viewsCount: estate.viewsCount });
+      return;
+    }
+
+    // Atomic operation: Only increment if user hasn't viewed before
+    const result = await Ads.findOneAndUpdate(
+      {
+        _id: estateId,
+        viewedBy: { $ne: userId }, // Only update if user NOT in viewedBy array
+      },
+      {
+        $addToSet: { viewedBy: userId }, // Add user to viewedBy (no duplicates)
+        $inc: { viewsCount: 1 }, // Increment view count
+      },
+      {
+        new: true, // Return updated document
+        select: 'viewsCount', // Only return viewsCount field
+      }
+    );
+
+    if (!result) {
+      // Either estate doesn't exist OR user already viewed it
+      const estate = await Ads.findById(estateId).select('viewsCount');
+      if (!estate) {
+        throw new NotFoundError('Estate not found');
+      }
+      // User already viewed, return current count
+      res.status(StatusCodes.OK).json({ viewsCount: estate.viewsCount });
+      return;
+    }
+
+    res.status(StatusCodes.OK).json({
+      viewsCount: result.viewsCount,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
+// ATOMIC TOGGLE LIKE AD
+// ============================================
+export const toggleLikeAd = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id: estateId } = req.params;
+    const userId = (req as any).user?.userId;
+
+    if (!userId) {
+      throw new NotFoundError('User not authenticated');
+    }
+
+    // First, check if user already liked the estate
+    const estate: any = await Ads.findById(estateId).select('likedBy');
+
+    if (!estate) {
+      throw new NotFoundError('Estate not found');
+    }
+
+    const isLiked = estate.likedBy.some((id: any) => id.toString() === userId);
+
+    // Single atomic operation based on current state
+    const result = await Ads.findByIdAndUpdate(
+      estateId,
+      isLiked
+        ? {
+            // UNLIKE: Remove user and decrement count
+            $pull: { likedBy: userId },
+            $inc: { likeCount: -1 },
+          }
+        : {
+            // LIKE: Add user and increment count
+            $addToSet: { likedBy: userId },
+            $inc: { likeCount: 1 },
+          },
+      {
+        new: true,
+        select: 'likeCount',
+      }
+    );
+
+    res.status(StatusCodes.OK).json({
+      liked: !isLiked,
+      likeCount: result?.likeCount || 0,
+    });
+  } catch (error) {
+    next(error);
+  }
 };

@@ -1,4 +1,7 @@
+// routes/messageRoute.ts
 import express from 'express';
+const router = express.Router();
+
 import {
   deleteMsg,
   retrieveMsg,
@@ -6,13 +9,14 @@ import {
   updateMsg,
 } from '../controller/messageController';
 import { upload } from '../middleware/multerMiddleware';
-const router = express.Router();
+import { testingUser } from '../middleware/testingUser'; // Import
 
-router.route('/').post(upload.array('media', 12), sendMsg);
-router
-  .route('/:roomId')
-  .get(retrieveMsg)
-  .put(upload.array('media', 12), updateMsg);
-router.route('/:id').delete(deleteMsg);
+// READ operations
+router.get('/:roomId', retrieveMsg);
+
+// WRITE operations - Protected from guest user
+router.post('/', testingUser, upload.array('media', 6), sendMsg);
+router.put('/:roomId', testingUser, updateMsg);
+router.delete('/:id', testingUser, deleteMsg);
 
 export default router;

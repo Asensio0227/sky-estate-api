@@ -4,6 +4,7 @@ const router = express.Router();
 import { createPushToken } from '../controller/expoController';
 import { authorizedPermissions } from '../middleware/authenticatedUser';
 import { upload } from '../middleware/multerMiddleware';
+import { testingUser } from '../middleware/testingUser';
 import {
   actionUser,
   getAllUsers,
@@ -14,19 +15,21 @@ import {
   updatePassword,
   updateUser,
 } from './../controller/userController';
-router.post('/expo-token', createPushToken);
+router.post('/expo-token', testingUser, createPushToken);
 
 router.get('/', getAllUsers);
 router.get('/showMe', showMeUser);
-router.put('/update-user', upload.single('avatar'), updateUser);
-router.patch('/location', updateLocation);
-router.patch('/manual-location', updateManualLocation);
+router.put('/update-user', testingUser, upload.single('avatar'), updateUser);
+router.patch('/location', testingUser, updateLocation);
+router.patch('/manual-location', testingUser, updateManualLocation);
 router.put(
   '/:id',
+  testingUser,
+  testingUser,
   authorizedPermissions('admin', 'assistant', 'member'),
   actionUser
 );
-router.patch('/', updatePassword);
+router.patch('/', testingUser, updatePassword);
 router.get('/:id', getSingleUser);
 
 export default router;

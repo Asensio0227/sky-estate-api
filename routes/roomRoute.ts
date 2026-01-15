@@ -1,4 +1,7 @@
+// routes/roomRoute.ts
 import express from 'express';
+const router = express.Router();
+
 import {
   createRoom,
   removeRoom,
@@ -6,10 +9,15 @@ import {
   retrieveUserRooms,
   updateRoom,
 } from '../controller/roomController';
+import { testingUser } from '../middleware/testingUser'; // Import
 
-const router = express.Router();
+// READ operations
+router.get('/', retrieveUserRooms);
+router.get('/:id', retrieveRoom);
 
-router.route('/').post(createRoom).get(retrieveUserRooms);
-router.route('/:id').delete(removeRoom).get(retrieveRoom).put(updateRoom);
+// WRITE operations - Protected from guest user
+router.post('/', testingUser, createRoom);
+router.put('/:id', testingUser, updateRoom);
+router.delete('/:id', testingUser, removeRoom);
 
 export default router;

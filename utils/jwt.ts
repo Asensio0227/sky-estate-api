@@ -68,6 +68,9 @@ export const attachCookiesToResponse = ({
 };
 
 export const createTokenUser = (user: UserDocument) => {
+  const GUEST_USER_ID = process.env.GUEST_USER_ID || '67b487476845366caa92ab43';
+  const guestUserFlag = user._id.toString() === GUEST_USER_ID;
+
   return {
     fName: `${user.first_name} ${user.last_name}`,
     userId: user._id,
@@ -78,6 +81,7 @@ export const createTokenUser = (user: UserDocument) => {
     expoToken: user.expoToken,
     status: user.status,
     lastSeen: user.lastSeen,
+    guestUser: guestUserFlag,
   };
 };
 

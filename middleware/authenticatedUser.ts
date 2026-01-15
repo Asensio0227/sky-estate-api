@@ -12,6 +12,7 @@ export interface authUser {
   username: string;
   expoToken?: string;
   status: string;
+  guestUser?: boolean;
 }
 
 export interface payloadUser {
@@ -25,43 +26,81 @@ export const authenticatedUser = async (
   res: Response,
   next: NextFunction
 ) => {
-  const { refresh_token, access_token } = req.signedCookies;
+  let token;
+
+  // 1️⃣ Authorization header (MOBILE SAFE)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  }
+
+  // 2️⃣ Cookie fallback (WEB)
+  if (!token && req.signedCookies?.access_token) {
+    token = req.signedCookies.access_token;
+  }
+
+  if (!token) {
+    throw new UnauthenticatedError('Authentication Invalid');
+  }
+
   try {
-    if (access_token) {
-      const payload: any | payloadUser = isTokenValid(
-        access_token,
-        process.env.JWT_SECRET!
-      );
-      req.user = payload.user;
-      return next();
-    }
-
-    const payload: any | payloadUser = isTokenValid(
-      refresh_token,
-      process.env.JWT_SECRET_REFRESH!
-    );
-
-    const existingToken = await Token.findOne({
-      user: payload.user.userId,
-      refreshToken: payload.refreshToken,
-    });
-
-    if (!existingToken || !existingToken?.isValid) {
-      throw new UnauthenticatedError('Authentication Invalid!');
-    }
-
-    attachCookiesToResponse({
-      res,
-      user: payload.user,
-      refreshToken: existingToken.refreshToken,
-    });
-
-    req.user = payload.user;
+    const payload: any = isTokenValid(token, process.env.JWT_SECRET!);
+    // Check if this is the guest user
+    const GUEST_USER_ID =
+      process.env.GUEST_USER_ID || '67b487476845366caa92ab43';
+    const guestUserFlag = payload.user.userId === GUEST_USER_ID;
+    req.user = {
+      ...payload.user,
+      guestUser: guestUserFlag, // Add guest flag
+    };
     next();
-  } catch (error: any) {
+  } catch {
     throw new UnauthenticatedError('Authentication Invalid');
   }
 };
+
+// export const authenticatedUser = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction
+// ) => {
+//   const { refresh_token, access_token } = req.signedCookies;
+//   try {
+//     if (access_token) {
+//       const payload: any | payloadUser = isTokenValid(
+//         access_token,
+//         process.env.JWT_SECRET!
+//       );
+//       req.user = payload.user;
+//       return next();
+//     }
+
+//     const payload: any | payloadUser = isTokenValid(
+//       refresh_token,
+//       process.env.JWT_SECRET_REFRESH!
+//     );
+
+//     const existingToken = await Token.findOne({
+//       user: payload.user.userId,
+//       refreshToken: payload.refreshToken,
+//     });
+
+//     if (!existingToken || !existingToken?.isValid) {
+//       throw new UnauthenticatedError('Authentication Invalid!');
+//     }
+
+//     attachCookiesToResponse({
+//       res,
+//       user: payload.user,
+//       refreshToken: existingToken.refreshToken,
+//     });
+
+//     req.user = payload.user;
+//     next();
+//   } catch (error: any) {
+//     throw new UnauthenticatedError('Authentication Invalid');
+//   }
+// };
 
 export const authorizedPermissions = (...role: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {

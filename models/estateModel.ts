@@ -15,6 +15,8 @@ export interface UIEstateDocument extends mongoose.Document {
   location: any;
   contact_details: ContactOb;
   user: mongoose.Types.ObjectId | unknown;
+  likedBy: mongoose.Types.ObjectId | unknown;
+  viewedBy: mongoose.Types.ObjectId | unknown;
   average_rating: Number;
   numOfReviews: number;
   category: modalTypes;
@@ -26,6 +28,15 @@ export interface UIEstateDocument extends mongoose.Document {
   availableFrom?: Date;
   isFurnished?: boolean;
   minimumStay?: number;
+  listingSource: 'municipality' | 'agent' | 'owner';
+  isClaimable: boolean;
+  claimedBy?: mongoose.Types.ObjectId;
+  featuredUntil?: Date;
+  viewsCount: number;
+  likeCount: number;
+  isVerified: boolean;
+  bedrooms: Number;
+  bathrooms: Number;
 }
 
 export interface estateDocument extends UIEstateDocument, mongoose.Document {
@@ -55,12 +66,14 @@ const estateSchema = new mongoose.Schema<estateDocument>(
       type: String,
       required: [true, 'Please provide title'],
       minlength: 5,
+      trim: true,
       maxlength: 100,
     },
     description: {
       type: String,
       required: [true, 'Please provide description'],
       minlength: 10,
+      trim: true,
       maxlength: 1000,
     },
     price: {
@@ -79,6 +92,7 @@ const estateSchema = new mongoose.Schema<estateDocument>(
       type: String,
       required: [true, 'Please specify listing type'],
       enum: ['sale', 'rent'],
+      trim: true,
       default: 'sale',
     },
     rentPrice: {
@@ -93,6 +107,7 @@ const estateSchema = new mongoose.Schema<estateDocument>(
       required: function (this: estateDocument) {
         return this.listingType === 'rent';
       },
+      trim: true,
       enum: ['daily', 'weekly', 'monthly', 'yearly'],
     },
     depositAmount: {
@@ -116,15 +131,18 @@ const estateSchema = new mongoose.Schema<estateDocument>(
     contact_details: {
       phone_number: {
         type: String,
+        trim: true,
         required: [true, 'Please provide your phone number'],
       },
       email: {
         type: String,
+        trim: true,
         required: [true, 'Please provide your email address'],
         match: [/.+@.+\..+/, 'Please enter a valid email address'],
       },
       address: {
         type: String,
+        trim: true,
         required: [true, 'Please provide your address'],
       },
     },
@@ -144,6 +162,49 @@ const estateSchema = new mongoose.Schema<estateDocument>(
         message: '{Value} is not supported.',
       },
     },
+    listingSource: {
+      type: String,
+      enum: ['municipality', 'agent', 'owner'],
+      trim: true,
+      default: 'owner',
+    },
+    isClaimable: {
+      type: Boolean,
+      default: false,
+    },
+    claimedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    featuredUntil: {
+      type: Date,
+    },
+    viewsCount: {
+      type: Number,
+      default: 0,
+    },
+    viewedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    likeCount: {
+      type: Number,
+      default: 0,
+    },
+    likedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    bedrooms: { type: Number, min: 0 },
+    bathrooms: { type: Number, min: 0 },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -157,12 +218,10 @@ const estateSchema = new mongoose.Schema<estateDocument>(
   }
 );
 
-estateSchema.index(
-  { location: '2dsphere' }
-  // { location: '2dsphere', user: 1, title: 1, 'photo.0': 1 },
-  // { unique: true }
-);
-
+estateSchema.index({ location: '2dsphere' });
+estateSchema.index({ user: 1, title: 1, 'photo.0.url': 1 }, { unique: true });
+estateSchema.index({ likedBy: 1 });
+estateSchema.index({ viewedBy: 1 });
 estateSchema.virtual('reviews', {
   ref: 'Review',
   localField: '_id',
@@ -170,30 +229,28 @@ estateSchema.virtual('reviews', {
   justOne: false,
 });
 
-// estateSchema.pre('save', function (next) {
-//   const self = this;
-//   console.log(`====self====`);
-//   console.log(self);
-//   console.log(`====self====`);
-//   estateModel.findOne(
-//     {
-//       user: self.user,
-//       title: self.title,
-//       photo: self.photo,
-//     },
-//     function (err: any, existingDoc: any) {
-//       if (err) {
-//         next(err);
-//       } else if (existingDoc) {
-//         next(
-//           new Error('Document with same title, photo, and user already exists')
-//         );
-//       } else {
-//         next();
-//       }
-//     }
-//   );
-// });
+estateSchema.pre('save', async function (next) {
+  try {
+    const Estate = this.constructor as mongoose.Model<estateDocument> | any;
+
+    const existingDoc = await Estate.findOne({
+      user: this.user,
+      title: this.title,
+      photo: this.photo,
+      _id: { $ne: this._id }, // IMPORTANT: avoids blocking updates
+    });
+
+    if (existingDoc) {
+      return next(
+        new Error('Document with same title, photo, and user already exists')
+      );
+    }
+
+    next();
+  } catch (err) {
+    next(err as any);
+  }
+});
 
 estateSchema.pre('deleteOne', async function (next) {
   try {

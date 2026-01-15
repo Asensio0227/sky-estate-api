@@ -1,11 +1,17 @@
+// routes/notificationsRoute.ts
 import express from 'express';
+const router = express.Router();
+
 import {
   createNotifications,
   retrieveNotificationHistory,
 } from '../controller/notificationController';
+import { testingUser } from '../middleware/testingUser'; // Import
 
-const router = express.Router();
+// READ operations
+router.get('/', retrieveNotificationHistory);
 
-router.route('/').post(createNotifications).get(retrieveNotificationHistory);
+// WRITE operations - Protected from guest user
+router.post('/', testingUser, createNotifications);
 
 export default router;

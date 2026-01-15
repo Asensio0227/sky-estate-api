@@ -80,8 +80,8 @@ export const updateUser = async (req: Request, res: Response) => {
   if (!newUser) {
     throw new BadRequestError('Please provide all values');
   }
-  let id;
 
+  let id;
   if (req.user && typeof req.user.userId === 'string') {
     id = req.user?.userId;
   }
@@ -96,6 +96,7 @@ export const updateUser = async (req: Request, res: Response) => {
     throw new NotFoundError('User not found or invalid ID');
   }
 
+  // ✅ Handle file upload
   if (req.file) {
     try {
       const file = req.file;
@@ -106,6 +107,7 @@ export const updateUser = async (req: Request, res: Response) => {
     }
   }
 
+  // ✅ Update basic fields
   if (newUser.avatar) user.avatar = newUser.avatar;
   if (newUser.gender) user.gender = newUser.gender;
   if (newUser.username) user.username = newUser.username;
@@ -115,22 +117,57 @@ export const updateUser = async (req: Request, res: Response) => {
   if (newUser.lastSeen) user.lastSeen = newUser.lastSeen;
   if (newUser.first_name) user.first_name = newUser.first_name;
   if (newUser.ideaNumber) user.ideaNumber = newUser.ideaNumber;
-  if (newUser.userAds_address)
-    user.userAds_address =
-      typeof newUser.userAds_address === 'string'
-        ? JSON.parse(newUser.userAds_address)
-        : newUser.userAds_address;
 
+  // ✅ Handle userAds_address
+  if (newUser.userAds_address) {
+    let parsedAddress = newUser.userAds_address;
+    if (typeof newUser.userAds_address === 'string') {
+      if (
+        newUser.userAds_address !== 'undefined' &&
+        newUser.userAds_address !== '[object Object]'
+      ) {
+        try {
+          parsedAddress = JSON.parse(newUser.userAds_address);
+        } catch (error) {
+          throw new BadRequestError('Invalid userAds_address format');
+        }
+      }
+    }
+    user.userAds_address = parsedAddress;
+  }
+
+  // ✅ Handle physical_address - Parse JSON string
   if (newUser.physical_address) {
-    const { physical_address } = newUser;
-    const physicalAddress = physical_address;
+    let physicalAddress = newUser.physical_address;
+
+    // If it's a string, parse it
+    if (typeof newUser.physical_address === 'string') {
+      try {
+        physicalAddress = JSON.parse(newUser.physical_address);
+      } catch (error) {
+        throw new BadRequestError('Invalid physical_address format');
+      }
+    }
+
     user.physical_address = physicalAddress;
   }
+
+  // ✅ Handle contact_details - Parse JSON string
   if (newUser.contact_details) {
-    const { contact_details } = newUser;
-    const contact = contact_details;
-    user.contact_details = contact;
+    let contactDetails = newUser.contact_details;
+
+    // If it's a string, parse it
+    if (typeof newUser.contact_details === 'string') {
+      try {
+        contactDetails = JSON.parse(newUser.contact_details);
+      } catch (error) {
+        throw new BadRequestError('Invalid contact_details format');
+      }
+    }
+
+    user.contact_details = contactDetails;
   }
+
   await user.save();
 
   res.status(StatusCodes.OK).json({ user });

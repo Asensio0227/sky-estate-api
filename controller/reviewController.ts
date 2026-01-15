@@ -109,15 +109,22 @@ export const removeReview = async (req: Request, res: Response) => {
 export const retrieveEstateReviews = async (req: Request, res: Response) => {
   const { id: houseId } = req.params;
   const { page, limit, skip } = queryFilters(req);
-  const ad = await Ads.findOne({ _id: houseId });
+
+  // Populate the user field in the ad
+  const ad = await Ads.findOne({ _id: houseId }).populate({
+    path: 'user',
+    select: 'username avatar email status lastSeen first_name last_name',
+  });
+
   const reviews = await Review.find({ estate: houseId })
     .sort('-createdAt')
     .limit(limit)
     .skip(skip)
     .populate([
-      { path: 'estate', select: 'photo title price ' },
+      { path: 'estate', select: 'photo title price' },
       { path: 'user', select: 'username avatar' },
     ]);
+
   res
     .status(StatusCodes.CREATED)
     .json({ ad, reviews, count: reviews.length, page });

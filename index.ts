@@ -74,6 +74,7 @@ app.get('/', function (req, res) {
 app.get('/api/v1', (req, res) => {
   res.send('SkyEstate Housing App Api');
 });
+// app.use('/api/v1/guest/estate', asyncHandler(guestRoute));
 
 app.use('/api/v1/auth', asyncHandler(authRoute));
 app.use('/api/v1/user', authenticatedUser, asyncHandler(userRoute));
@@ -88,6 +89,7 @@ app.use(NotFoundMiddleware as unknown as RequestHandler);
 app.use(errorHandleMiddleware as unknown as RequestHandler);
 
 const port = process.env.port || 5000;
+// const port = 3000;
 
 async function start(): Promise<void> {
   try {

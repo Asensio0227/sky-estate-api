@@ -16,6 +16,10 @@ export const createRoom = async (
 ): Promise<CreateRoomResponse | any> => {
   const { participants, participantsArray } = req.body;
 
+  console.log(`===req.body= create room==`);
+  console.log(req.body);
+  console.log(`===req.body=create room==`);
+
   if (!participants || !participantsArray) {
     throw new BadRequestError('Please provide all values');
   }

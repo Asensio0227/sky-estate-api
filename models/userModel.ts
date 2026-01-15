@@ -55,6 +55,7 @@ export interface UIUser extends Document {
 }
 
 export interface UserDocument extends UIUser, mongoose.Document {
+  _id: mongoose.Types.ObjectId;
   password: string;
   verificationToken: number | string;
   avatar: string;
@@ -79,7 +80,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
     first_name: {
       type: String,
       required: [true, 'Please provide your name'],
-      minlength: 5,
+      minlength: 3,
       maxlength: 20,
       trim: true,
     },
@@ -129,27 +130,33 @@ const userSchema = new mongoose.Schema<UserDocument>(
     },
     date_of_birth: {
       type: String,
+      trim: true,
       required: [true, 'Please provide your date of birth'],
     },
     physical_address: {
       street: {
+        trim: true,
         type: String,
         required: [true, 'Please provide your street'],
       },
       city: {
         type: String,
+        trim: true,
         required: [true, 'Please provide your city'],
       },
       province: {
         type: String,
+        trim: true,
         required: [true, 'Please provide your state'],
       },
       postal_code: {
         type: String,
+        trim: true,
         required: [true, 'Please provide your zip code'],
       },
       country: {
         type: String,
+        trim: true,
         required: [true, 'Please provide your country'],
       },
     },
@@ -162,12 +169,14 @@ const userSchema = new mongoose.Schema<UserDocument>(
         type: String,
         required: [true, 'Please provide your phone number'],
         unique: true,
+        trim: true,
       },
       email: {
         type: String,
         required: [true, 'Please provide your email address'],
         match: [/.+@.+\..+/, 'Please enter a valid email address'],
         unique: true,
+        trim: true,
       },
     },
     status: {
