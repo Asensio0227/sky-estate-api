@@ -1,11 +1,13 @@
 {
   "compilerOptions": {
-    /* Visit https://aka.ms/tsconfig to read more about this file */
+    "target": "ES2020",
+    "module": "CommonJS",
 
-    "target": "ES6",
-    "module": "commonjs",
+    "rootDir": ".",
+    "outDir": "dist",
+
     "typeRoots": ["./node_modules/@types", "./@types"],
-    "allowUmdGlobalAccess": true,
+
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
@@ -22,5 +24,6 @@
     "models/**/*",
     "utils/**/*",
     "@types/**/*"
-  ]
+  ],
+  "exclude": ["node_modules"]
 }

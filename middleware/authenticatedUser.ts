@@ -22,9 +22,9 @@ export interface payloadUser {
 }
 
 export const authenticatedUser = async (
-  req: Request,
+  req: Request | any,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   let token;
 
@@ -49,10 +49,8 @@ export const authenticatedUser = async (
     const GUEST_USER_ID =
       process.env.GUEST_USER_ID || '67b487476845366caa92ab43';
     const guestUserFlag = payload.user.userId === GUEST_USER_ID;
-    req.user = {
-      ...payload.user,
-      guestUser: guestUserFlag, // Add guest flag
-    };
+    req.user = payload.user as Express.User;
+    req.user.guestUser = guestUserFlag;
     next();
   } catch {
     throw new UnauthenticatedError('Authentication Invalid');

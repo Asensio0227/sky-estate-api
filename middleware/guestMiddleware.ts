@@ -4,17 +4,17 @@ import { UnauthenticatedError } from '../errors/custom';
 import User, { UserDocument } from '../models/userModel';
 
 export const guestAuthMiddleware = async (
-  req: Request,
+  req: Request | any,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const GUEST_USER_ID = process.env.GUEST_USER_ID || '67b487476845366caa92ab43';
 
   try {
     const guestUser: UserDocument | any = await User.findById(
-      GUEST_USER_ID
+      GUEST_USER_ID,
     ).select(
-      '-password -verificationToken -passwordToken -passwordTokenExpirationDate'
+      '-password -verificationToken -passwordToken -passwordTokenExpirationDate',
     );
 
     if (!guestUser) {

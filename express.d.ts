@@ -1,35 +1,23 @@
-import { Request } from 'express';
+import 'express';
 
-declare module 'express' {
+declare global {
   namespace Express {
+    interface User {
+      userId: string;
+      role: string;
+      fName: string;
+      email: string;
+      username: string;
+      avatar?: string;
+      expoToken?: string;
+      status?: string;
+      guestUser?: boolean; // ✅ ADD HERE
+    }
+
     interface Request {
-      user?: {
-        role: string;
-        userId: string;
-        fName: string;
-        avatar?: string;
-        email: string;
-        username: string;
-        expoToken?: string;
-        status?: string;
-      };
+      user?: User;
     }
   }
 }
 
-// declare global {
-//   namespace Express {
-//     interface Request {
-//       user?: {
-//         role: string;
-//         userId: string;
-//         fName: string;
-//         avatar?: string;
-//         email: string;
-//         username: string;
-//         expoToken?: string;
-//         status?: string;
-//       };
-//     }
-//   }
-// }
+export {};

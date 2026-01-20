@@ -3,6 +3,7 @@ import { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { UnauthenticatedError } from '../errors/custom';
 import { UserDocument } from '../models/userModel';
+import { AuthJwtPayload } from './../types/jwt';
 
 const createJwt = ({ payload }: { payload: any }) => {
   if (!process.env.JWT_SECRET) {
@@ -67,7 +68,7 @@ export const attachCookiesToResponse = ({
   });
 };
 
-export const createTokenUser = (user: UserDocument) => {
+export const createTokenUser = (user: UserDocument | any) => {
   const GUEST_USER_ID = process.env.GUEST_USER_ID || '67b487476845366caa92ab43';
   const guestUserFlag = user._id.toString() === GUEST_USER_ID;
 
@@ -88,10 +89,10 @@ export const createTokenUser = (user: UserDocument) => {
 export const hashString = (hash: string): string =>
   crypto.createHash('md5').update(hash).digest('hex');
 
-export const isTokenValid = (token: string, value: string) => {
-  if (!token && !value) {
+export const isTokenValid = (token: string, value: string): AuthJwtPayload => {
+  if (!token || !value) {
     throw new UnauthenticatedError('Invalid token');
   }
 
-  return jwt.verify(token, value);
+  return jwt.verify(token, value) as AuthJwtPayload;
 };
