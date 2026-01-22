@@ -49,8 +49,12 @@ export const authenticatedUser = async (
     const GUEST_USER_ID =
       process.env.GUEST_USER_ID || '67b487476845366caa92ab43';
     const guestUserFlag = payload.user.userId === GUEST_USER_ID;
-    req.user = payload.user as Express.User;
+    req.user = payload.user;
     req.user.guestUser = guestUserFlag;
+    // req.user = {
+    //   ...payload.user,
+    //   guestUser: guestUserFlag,
+    // };
     next();
   } catch {
     throw new UnauthenticatedError('Authentication Invalid');
