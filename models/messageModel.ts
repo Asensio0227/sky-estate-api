@@ -17,6 +17,7 @@ export interface IMessage extends mongoose.Document {
   photo: IPhoto[];
   video?: IPhoto[];
   audio?: IPhoto[];
+  file?: IPhoto[];
   system?: boolean;
   sent?: boolean;
   received?: boolean;
@@ -32,38 +33,39 @@ const messageSchema = new mongoose.Schema(
     photo: {
       type: [
         {
-          id: {
-            type: String,
-          },
-          url: {
-            type: String,
-          },
+          id: { type: String },
+          url: { type: String },
+          name: { type: String },
         },
       ],
     },
     audio: {
       type: [
         {
-          id: {
-            type: String,
-          },
-          url: {
-            type: String,
-          },
+          id: { type: String },
+          url: { type: String },
+          name: { type: String },
         },
       ],
     },
     video: {
       type: [
         {
-          id: {
-            type: String,
-          },
-          url: {
-            type: String,
-          },
+          id: { type: String },
+          url: { type: String },
+          name: { type: String },
         },
       ],
+    },
+    file: {
+      type: [
+        {
+          id: { type: String },
+          url: { type: String },
+          name: { type: String },
+        },
+      ],
+      default: [],
     },
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -80,7 +82,7 @@ const messageSchema = new mongoose.Schema(
     received: { type: Boolean, default: false },
     isRead: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model('Message', messageSchema);

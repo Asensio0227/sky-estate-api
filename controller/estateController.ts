@@ -20,9 +20,6 @@ export const createAd = async (req: Request, res: Response) => {
     ? Number(req.body.rentPrice)
     : undefined;
   let parsedLocation = req.body.location;
-  console.log(`====create ad for houses===`);
-  console.log(req.body);
-  console.log(`====create ad for houses===`);
   if (req.body.location) {
     if (typeof req.body.location === 'string') {
       if (
@@ -125,7 +122,7 @@ export const retrieveAllAd = async (req: Request, res: Response) => {
     sortKey,
     maxRadius,
     userLocation,
-    userSearchState
+    userSearchState,
   );
   userSearchState.currentRadius = initialRadius; // Reset radius for new search
   const totalAds = await Ads.countDocuments(queryObj);
@@ -169,7 +166,7 @@ export const retrieveAllUserAd = async (req: Request, res: Response) => {
     ads.map(async (ad: estateDocument) => {
       ad.featured = checkFeaturedStatus(ad);
       await ad.save();
-    })
+    }),
   );
 
   const totalAds = await Ads.countDocuments(queryObj);
@@ -278,7 +275,7 @@ export const markAsTaken = async (req: Request, res: Response) => {
 const getAllEstates = async (
   page: number,
   limit: number,
-  matchConditions: any = {}
+  matchConditions: any = {},
 ) => {
   const skip = (Number(page) - 1) * Number(limit);
 
@@ -318,145 +315,6 @@ const isValidCoordinates = (coordinates: number[]): boolean => {
   );
 };
 
-// export const getNearbyEstates = async (req: Request, res: Response) => {
-//   try {
-//     const userId = req.user?.userId;
-//     const user = await User.findOne({ _id: userId });
-
-//     if (!user) {
-//       throw new NotFoundError('User not found');
-//     }
-
-//     const {
-//       distance = 10,
-//       page = 1,
-//       limit = 20,
-//       listingType,
-//       minPrice,
-//       maxPrice,
-//       furnished,
-//       bedrooms,
-//       bathrooms,
-//     } = req.query;
-
-//     // Try to get valid user location
-//     let userLocation =
-//       user.currentLocation?.coordinates || user.userAds_address?.coordinates;
-
-//     // Validate coordinates
-//     const hasValidLocation = userLocation && isValidCoordinates(userLocation);
-
-//     // Build match conditions for filters
-//     let matchConditions: any = { taken: false };
-
-//     if (listingType) {
-//       matchConditions.listingType = listingType;
-//     }
-
-//     if (minPrice || maxPrice) {
-//       const priceField = listingType === 'rent' ? 'rentPrice' : 'price';
-//       matchConditions[priceField] = {};
-//       if (minPrice) matchConditions[priceField].$gte = Number(minPrice);
-//       if (maxPrice) matchConditions[priceField].$lte = Number(maxPrice);
-//     }
-
-//     if (furnished !== undefined) {
-//       matchConditions.isFurnished = furnished === 'true';
-//     }
-
-//     if (bedrooms) {
-//       matchConditions.bedrooms = Number(bedrooms);
-//     }
-
-//     if (bathrooms) {
-//       matchConditions.bathrooms = Number(bathrooms);
-//     }
-
-//     let ads: any[] = [];
-//     let total = 0;
-//     let numOfPages = 0;
-
-//     // If we have valid location, try geo query first
-//     if (hasValidLocation) {
-//       const pipeline = [
-//         {
-//           $geoNear: {
-//             near: {
-//               type: 'Point',
-//               coordinates: userLocation,
-//             },
-//             distanceField: 'distance',
-//             maxDistance: Number(distance) * 1000, // Convert km to meters
-//             spherical: true,
-//             key: 'location',
-//           },
-//         },
-//         {
-//           $match: matchConditions,
-//         },
-//         {
-//           $lookup: {
-//             from: 'users',
-//             localField: 'user',
-//             foreignField: '_id',
-//             as: 'user',
-//             pipeline: [
-//               {
-//                 $project: {
-//                   username: 1,
-//                   avatar: 1,
-//                   email: 1,
-//                   lastSeen: 1,
-//                   status: 1,
-//                 },
-//               },
-//             ],
-//           },
-//         },
-//         {
-//           $unwind: '$user',
-//         },
-//         {
-//           $facet: {
-//             ads: [
-//               { $skip: (Number(page) - 1) * Number(limit) },
-//               { $limit: Number(limit) },
-//             ],
-//             total: [{ $count: 'count' }],
-//           },
-//         },
-//       ];
-
-//       try {
-//         const result = await Ads.aggregate(pipeline as any[]);
-//         ads = result[0]?.ads || [];
-//         total = result[0]?.total[0]?.count || 0;
-//         numOfPages = Math.ceil(total / Number(limit));
-//       } catch (geoError) {
-//         console.error('Geo query failed:', geoError);
-//         // Will fall through to fallback
-//       }
-//     }
-
-//     // Fallback: If no nearby estates found or no valid location, fetch all estates with filters
-//     if (ads.length === 0) {
-//       const fallbackData = await getAllEstates(
-//         Number(page),
-//         Number(limit),
-//         matchConditions
-//       );
-//       ads = fallbackData.ads;
-//       total = fallbackData.total;
-//       numOfPages = fallbackData.numOfPages;
-//     }
-
-//     res.status(StatusCodes.OK).json({ ads, total, numOfPages, page });
-//   } catch (error) {
-//     console.error('Error in getNearbyEstates:', error);
-//     throw error;
-//   }
-// };
-
 export const getRentals = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -464,7 +322,7 @@ export const getRentals = async (req: Request, res: Response) => {
     if (!user) throw new NotFoundError('User not found');
 
     const {
-      distance = 10,
+      distance = 50,
       page = 1,
       limit = 20,
       minPrice,
@@ -568,7 +426,7 @@ export const getRentals = async (req: Request, res: Response) => {
       const fallbackData = await getAllEstates(
         Number(page),
         Number(limit),
-        matchConditions
+        matchConditions,
       );
       ads = fallbackData.ads;
       total = fallbackData.total;
@@ -713,7 +571,7 @@ export const searchEstates = async (req: Request, res: Response) => {
       const fallbackData = await getAllEstates(
         Number(page),
         Number(limit),
-        matchConditions
+        matchConditions,
       );
       ads = fallbackData.ads;
       total = fallbackData.total;
@@ -862,7 +720,7 @@ export const getNearbyEstates = async (req: Request, res: Response) => {
         '🌍 Skipping NEARBY - fetchMode:',
         fetchMode,
         'hasLocation:',
-        hasValidLocation
+        hasValidLocation,
       );
     }
 
@@ -873,7 +731,7 @@ export const getNearbyEstates = async (req: Request, res: Response) => {
       const fallbackData = await getAllEstates(
         Number(page),
         Number(limit),
-        matchConditions
+        matchConditions,
       );
 
       ads = fallbackData.ads;
@@ -904,7 +762,7 @@ export const getNearbyEstates = async (req: Request, res: Response) => {
 export const incrementAdView = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id: estateId } = req.params;
@@ -933,7 +791,7 @@ export const incrementAdView = async (
       {
         new: true, // Return updated document
         select: 'viewsCount', // Only return viewsCount field
-      }
+      },
     );
 
     if (!result) {
@@ -961,7 +819,7 @@ export const incrementAdView = async (
 export const toggleLikeAd = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { id: estateId } = req.params;
@@ -997,7 +855,7 @@ export const toggleLikeAd = async (
       {
         new: true,
         select: 'likeCount',
-      }
+      },
     );
 
     res.status(StatusCodes.OK).json({

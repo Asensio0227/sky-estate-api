@@ -10,20 +10,31 @@ export const sendMsg = async (req: Request, res: Response) => {
     audio: [],
     video: [],
     photo: [],
+    file: [],
   };
   const files: any = req.files;
   if (files) {
     for (let file of files) {
       const { url, id } = await imageUpload(file);
-      const mimeType = file.mimetype;
-      const mediaItem = { url, id };
+      const mimeType: string = file.mimetype || '';
+      const mediaItem = { url, id, name: file.originalname };
 
-      if (mimeType.startsWith('audio/')) {
+      if (
+        mimeType.startsWith('audio/') ||
+        mimeType === 'audio/x-m4a' ||
+        mimeType === 'audio/mp4' ||
+        mimeType === 'audio/mpeg' ||
+        mimeType === 'audio/ogg' ||
+        mimeType === 'audio/wav'
+      ) {
         fileTypes.audio.push(mediaItem);
       } else if (mimeType.startsWith('video/')) {
         fileTypes.video.push(mediaItem);
       } else if (mimeType.startsWith('image/')) {
         fileTypes.photo.push(mediaItem);
+      } else {
+        // Treat everything else (pdf, doc, zip, etc.) as a file attachment
+        fileTypes.file.push(mediaItem);
       }
     }
   }
@@ -33,13 +44,14 @@ export const sendMsg = async (req: Request, res: Response) => {
     photo: fileTypes.photo,
     audio: fileTypes.audio,
     video: fileTypes.video,
+    file: fileTypes.file,
     sent: true,
   });
   let lastMessage = newMsg;
   const room: RoomType | any = await Room.findOne({ _id: req.body.roomId });
 
   room.lastMessage = lastMessage;
-  await room.save;
+  await room.save();
   res.status(StatusCodes.CREATED).json({ newMsg });
 };
 
@@ -62,7 +74,7 @@ export const updateMsg = async (req: Request, res: Response) => {
 
   if (!userStatus) {
     throw new UnauthorizedError(
-      'User must be online to mark messages as read.'
+      'User must be online to mark messages as read.',
     );
   }
 
@@ -76,7 +88,7 @@ export const updateMsg = async (req: Request, res: Response) => {
       roomId: req.params.roomId,
       'user._id': { $ne: req.user?.userId },
     },
-    { $set: updateFields }
+    { $set: updateFields },
   );
 
   if (!message)

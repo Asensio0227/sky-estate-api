@@ -10,8 +10,17 @@ import { sendNotification } from '../utils/pushToken';
 export const createNotifications = async (req: Request, res: Response) => {
   const user: UserDocument | null = await User.findById(req.body.userId);
 
-  if (!user || !Expo.isExpoPushToken(user.expoToken)) {
-    throw new UnauthorizedError('Invalid or missing Expo token.');
+  if (!user) {
+    throw new UnauthorizedError('User not found.');
+  }
+
+  // ✅ Skip push if no valid token, but don't crash
+  if (!user.expoToken || !Expo.isExpoPushToken(user.expoToken)) {
+    console.warn(`⚠️ No valid Expo token for user: ${user.email}`);
+    return res.status(StatusCodes.CREATED).json({
+      result: null,
+      msg: 'Notification skipped - no valid push token',
+    });
   }
 
   const result = await sendNotification(req, user);
@@ -20,7 +29,7 @@ export const createNotifications = async (req: Request, res: Response) => {
 
 export const retrieveNotificationHistory = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   const { page, skip, limit } = queryFilters(req);
   const notifications = await Notification.find({ userId: req.user?.userId })
@@ -42,11 +51,12 @@ export const retrieveNotificationHistory = async (
   });
   const numOfPages = Math.ceil(totalNotifications / limit);
 
-  for (const notify of notifications) {
-    if (!Expo.isExpoPushToken(notify.expoPushToken)) {
-      throw new BadRequestError('Invalid Expo push token');
-    }
-  }
+  const validNotifications = notifications.filter((notify) => {
+    const isValid = Expo.isExpoPushToken(notify.expoPushToken);
+    if (!isValid)
+      console.warn(`⚠️ Skipping invalid token: ${notify.expoPushToken}`);
+    return isValid;
+  });
 
   res
     .status(StatusCodes.CREATED)
