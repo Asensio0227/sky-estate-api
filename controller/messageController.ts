@@ -10,7 +10,7 @@ import { imageUpload, queryFilters } from '../utils/global';
 // For PDFs, DOCs, ZIPs etc — Cloudinary requires resource_type:'raw', imageUpload() will 500
 const uploadAnyFile = async (
   file: any,
-): Promise<{ url: string; id?: string }> => {
+): Promise<{ url: string; id: string }> => {
   const mimeType: string = file.mimetype || '';
   const isMedia =
     mimeType.startsWith('image/') ||
@@ -38,14 +38,7 @@ const uploadAnyFile = async (
         resolve({ url: result.secure_url, id: result.public_id });
       },
     );
-    if (file.buffer && file.buffer.length > 0) {
-      stream.end(file.buffer);
-    } else if (file.path) {
-      const fs = require('fs');
-      fs.createReadStream(file.path).pipe(stream);
-    } else {
-      reject(new Error('No file buffer or path available'));
-    }
+    stream.end(file.buffer);
   });
 };
 
@@ -56,32 +49,38 @@ export const sendMsg = async (req: Request, res: Response) => {
     photo: [],
     file: [],
   };
-  const files: any = req.files;
-  if (files) {
-    for (let file of files) {
-      const { url, id } = await uploadAnyFile(file);
-      const mimeType: string = file.mimetype || '';
-      const mediaItem = { url, id, name: file.originalname };
 
-      if (
-        mimeType.startsWith('audio/') ||
-        [
-          'audio/x-m4a',
-          'audio/mp4',
-          'audio/mpeg',
-          'audio/ogg',
-          'audio/wav',
-        ].includes(mimeType)
-      ) {
-        fileTypes.audio.push(mediaItem);
-      } else if (mimeType.startsWith('video/')) {
-        fileTypes.video.push(mediaItem);
-      } else if (mimeType.startsWith('image/')) {
-        fileTypes.photo.push(mediaItem);
-      } else {
-        // PDFs, DOCs, ZIPs, and all other file types
-        fileTypes.file.push(mediaItem);
-      }
+  // upload.fields() gives { media: [...], files: [...] }
+  // upload.array() gives a flat array — handle both
+  const rawFiles: any = req.files || {};
+  const files: any[] = [
+    ...(Array.isArray(rawFiles) ? rawFiles : []),
+    ...(rawFiles.media || []), // images/audio/video from customMsg
+    ...(rawFiles.files || []), // documents/PDFs from sendFileMsg
+  ];
+
+  for (const file of files) {
+    const { url, id } = await uploadAnyFile(file);
+    const mimeType: string = file.mimetype || '';
+    const mediaItem = { url, id, name: file.originalname };
+
+    if (
+      mimeType.startsWith('audio/') ||
+      [
+        'audio/x-m4a',
+        'audio/mp4',
+        'audio/mpeg',
+        'audio/ogg',
+        'audio/wav',
+      ].includes(mimeType)
+    ) {
+      fileTypes.audio.push(mediaItem);
+    } else if (mimeType.startsWith('video/')) {
+      fileTypes.video.push(mediaItem);
+    } else if (mimeType.startsWith('image/')) {
+      fileTypes.photo.push(mediaItem);
+    } else {
+      fileTypes.file.push(mediaItem);
     }
   }
 

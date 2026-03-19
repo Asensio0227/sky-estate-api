@@ -15,7 +15,15 @@ import { testingUser } from '../middleware/testingUser'; // Import
 router.get('/:roomId', retrieveMsg);
 
 // WRITE operations - Protected from guest user
-router.post('/', testingUser, upload.array('media', 6), sendMsg);
+router.post(
+  '/',
+  testingUser,
+  upload.fields([
+    { name: 'media', maxCount: 6 }, // used by customMsg (images/audio/video)
+    { name: 'files', maxCount: 10 }, // used by sendFileMsg (documents/PDFs)
+  ]),
+  sendMsg,
+);
 router.put('/:roomId', testingUser, updateMsg);
 router.delete('/:id', testingUser, deleteMsg);
 
