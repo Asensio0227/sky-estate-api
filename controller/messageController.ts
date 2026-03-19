@@ -10,7 +10,7 @@ import { imageUpload, queryFilters } from '../utils/global';
 // For PDFs, DOCs, ZIPs etc — Cloudinary requires resource_type:'raw', imageUpload() will 500
 const uploadAnyFile = async (
   file: any,
-): Promise<{ url: string; id: string }> => {
+): Promise<{ url: string; id?: string }> => {
   const mimeType: string = file.mimetype || '';
   const isMedia =
     mimeType.startsWith('image/') ||
@@ -49,17 +49,16 @@ export const sendMsg = async (req: Request, res: Response) => {
     photo: [],
     file: [],
   };
-
-  // upload.fields() gives { media: [...], files: [...] }
-  // upload.array() gives a flat array — handle both
+  // upload.fields() returns { media: File[], files: File[] } — not a flat array
+  // Merge all field arrays into one list for uniform processing
   const rawFiles: any = req.files || {};
-  const files: any[] = [
-    ...(Array.isArray(rawFiles) ? rawFiles : []),
-    ...(rawFiles.media || []), // images/audio/video from customMsg
-    ...(rawFiles.files || []), // documents/PDFs from sendFileMsg
+  const allFiles: any[] = [
+    ...(Array.isArray(rawFiles) ? rawFiles : []), // upload.array() fallback
+    ...(rawFiles['media'] || []), // images/audio/video
+    ...(rawFiles['files'] || []), // documents/PDFs
   ];
 
-  for (const file of files) {
+  for (const file of allFiles) {
     const { url, id } = await uploadAnyFile(file);
     const mimeType: string = file.mimetype || '';
     const mediaItem = { url, id, name: file.originalname };
