@@ -1,5 +1,6 @@
 import cloudinary from 'cloudinary';
 import { Request } from 'express';
+import fs from 'fs';
 import Ads, { estateDocument } from '../models/estateModel';
 import User from '../models/userModel';
 
@@ -41,7 +42,7 @@ export function queryFilters(req: Request, sort?: string, sortKeys?: string) {
 }
 
 export function imageUpload(
-  file: Express.Multer.File
+  file: Express.Multer.File,
 ): Promise<{ url: string; id?: string }> {
   return new Promise((resolve, reject) => {
     try {
@@ -57,20 +58,24 @@ export function imageUpload(
           if (error) {
             return reject({ message: error.message || 'Upload failed' });
           }
-
           if (result && result.secure_url) {
             const { secure_url, public_id } = result;
-            return resolve({
-              url: secure_url,
-              id: public_id,
-            });
+            return resolve({ url: secure_url, id: public_id });
           }
-
           return reject({ message: 'Unknown error during upload' });
-        }
+        },
       );
 
-      uploadStream.end(file.buffer);
+      // Support both memoryStorage (file.buffer) and diskStorage (file.path)
+      if (file.buffer && file.buffer.length > 0) {
+        uploadStream.end(file.buffer);
+      } else if (file.path) {
+        fs.createReadStream(file.path)
+          .pipe(uploadStream)
+          .on('error', (err) => reject({ message: err.message }));
+      } else {
+        reject({ message: 'No file buffer or path available for upload' });
+      }
     } catch (error: any) {
       reject({ message: error.message || 'Unexpected error during upload' });
     }
@@ -80,7 +85,7 @@ export const checkFeaturedStatus = (ad: estateDocument) => {
   const now = new Date();
   const createdAtDate = new Date(ad.createdAt);
   const sevenDaysLater = new Date(
-    createdAtDate.setDate(createdAtDate.getDate() + 7)
+    createdAtDate.setDate(createdAtDate.getDate() + 7),
   );
 
   return now < sevenDaysLater;
@@ -91,7 +96,7 @@ export async function findAds(
   sortKey: any,
   maxRadius: any,
   userLocation: any,
-  userSearchState: any
+  userSearchState: any,
 ) {
   let ads = await Ads.find(queryObj)
     .sort(sortKey)
@@ -106,7 +111,7 @@ export async function findAds(
     ads.map(async (ad: estateDocument) => {
       ad.featured = checkFeaturedStatus(ad);
       await ad.save();
-    })
+    }),
   );
 
   while (ads.length === 0 && userSearchState.currentRadius <= maxRadius) {

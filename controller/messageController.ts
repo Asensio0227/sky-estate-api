@@ -1,9 +1,53 @@
+import { v2 as cloudinary } from 'cloudinary';
 import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { NotFoundError, UnauthorizedError } from '../errors/custom';
 import Message from '../models/messageModel';
 import Room, { RoomType } from '../models/roomModel';
 import { imageUpload, queryFilters } from '../utils/global';
+
+// For images/audio/video — use your existing imageUpload (resource_type:'image'/'video'/'audio')
+// For PDFs, DOCs, ZIPs etc — Cloudinary requires resource_type:'raw', imageUpload() will 500
+const uploadAnyFile = async (
+  file: any,
+): Promise<{ url: string; id?: string }> => {
+  const mimeType: string = file.mimetype || '';
+  const isMedia =
+    mimeType.startsWith('image/') ||
+    mimeType.startsWith('video/') ||
+    mimeType.startsWith('audio/') ||
+    [
+      'audio/x-m4a',
+      'audio/mp4',
+      'audio/mpeg',
+      'audio/ogg',
+      'audio/wav',
+    ].includes(mimeType);
+
+  if (isMedia) {
+    return imageUpload(file);
+  }
+
+  // Non-media file (PDF, DOC, ZIP etc) — upload as raw
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { resource_type: 'raw', folder: 'chat_files' },
+      (error, result) => {
+        if (error || !result)
+          return reject(error ?? new Error('Cloudinary upload failed'));
+        resolve({ url: result.secure_url, id: result.public_id });
+      },
+    );
+    if (file.buffer && file.buffer.length > 0) {
+      stream.end(file.buffer);
+    } else if (file.path) {
+      const fs = require('fs');
+      fs.createReadStream(file.path).pipe(stream);
+    } else {
+      reject(new Error('No file buffer or path available'));
+    }
+  });
+};
 
 export const sendMsg = async (req: Request, res: Response) => {
   const fileTypes: any = {
@@ -15,7 +59,7 @@ export const sendMsg = async (req: Request, res: Response) => {
   const files: any = req.files;
   if (files) {
     for (let file of files) {
-      const { url, id } = await imageUpload(file);
+      const { url, id } = await uploadAnyFile(file);
       const mimeType: string = file.mimetype || '';
       const mediaItem = { url, id, name: file.originalname };
 
