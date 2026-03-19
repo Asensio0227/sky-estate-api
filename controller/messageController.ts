@@ -21,11 +21,13 @@ export const sendMsg = async (req: Request, res: Response) => {
 
       if (
         mimeType.startsWith('audio/') ||
-        mimeType === 'audio/x-m4a' ||
-        mimeType === 'audio/mp4' ||
-        mimeType === 'audio/mpeg' ||
-        mimeType === 'audio/ogg' ||
-        mimeType === 'audio/wav'
+        [
+          'audio/x-m4a',
+          'audio/mp4',
+          'audio/mpeg',
+          'audio/ogg',
+          'audio/wav',
+        ].includes(mimeType)
       ) {
         fileTypes.audio.push(mediaItem);
       } else if (mimeType.startsWith('video/')) {
@@ -33,11 +35,12 @@ export const sendMsg = async (req: Request, res: Response) => {
       } else if (mimeType.startsWith('image/')) {
         fileTypes.photo.push(mediaItem);
       } else {
-        // Treat everything else (pdf, doc, zip, etc.) as a file attachment
+        // PDFs, DOCs, ZIPs, and all other file types
         fileTypes.file.push(mediaItem);
       }
     }
   }
+
   const newMsg = await Message.create({
     ...req.body,
     user: req.user?.userId,
@@ -47,11 +50,16 @@ export const sendMsg = async (req: Request, res: Response) => {
     file: fileTypes.file,
     sent: true,
   });
-  let lastMessage = newMsg;
-  const room: RoomType | any = await Room.findOne({ _id: req.body.roomId });
 
-  room.lastMessage = lastMessage;
-  await room.save();
+  // ✅ Use findOneAndUpdate instead of room.save() to avoid Mongoose
+  // optimistic concurrency version conflicts (VersionError) when multiple
+  // requests update the same room document concurrently.
+  await Room.findOneAndUpdate(
+    { _id: req.body.roomId },
+    { $set: { lastMessage: newMsg } },
+    { new: true },
+  );
+
   res.status(StatusCodes.CREATED).json({ newMsg });
 };
 
