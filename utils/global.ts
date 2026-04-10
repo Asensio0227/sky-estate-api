@@ -30,7 +30,7 @@ export function queryFilters(req: Request, sort?: string, sortKeys?: string) {
   const sortParam = isValidSortKey(sort) ? sort : 'string';
   const sortKey = sortOptions[sortParam] || sortOptions.newest;
   const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 20;
+  const limit = Math.min(Number(req.query.limit) || 20, 100); // FIX #8 — clamp; prevents unbounded queries
   const skip = (page - 1) * limit;
 
   return {
@@ -98,7 +98,7 @@ export async function findAds(
   userLocation: any,
   userSearchState: any,
 ) {
-  let ads = await Ads.find(queryObj)
+  let rawAds = await Ads.find(queryObj)
     .sort(sortKey)
     .skip(userSearchState.skip)
     .limit(userSearchState.limit)
@@ -107,27 +107,34 @@ export async function findAds(
       select: 'username avatar contact_details lastSeen status',
     });
 
-  await Promise.all(
-    ads.map(async (ad: estateDocument) => {
-      ad.featured = checkFeaturedStatus(ad);
-      await ad.save();
-    }),
-  );
+  // Compute featured status in-memory — never write in a read path
+  let ads: any[] = rawAds.map((ad: estateDocument) => ({
+    ...ad.toObject(),
+    featured: checkFeaturedStatus(ad),
+  }));
 
+  let iterations = 0;
   while (ads.length === 0 && userSearchState.currentRadius <= maxRadius) {
+    if (iterations >= 5) break;
+    iterations++;
     const expandedQueryObj = {
       location: {
         $geoWithin: {
-          $centerSphere: [userLocation, userSearchState.currentRadius / 6378.1], // Convert km to radians
+          $centerSphere: [userLocation, userSearchState.currentRadius / 6378.1],
         },
       },
     };
 
-    ads = await Ads.find(expandedQueryObj)
+    const expandedRaw = await Ads.find(expandedQueryObj)
       .sort(sortKey)
       .skip(userSearchState.skip)
       .limit(userSearchState.limit)
       .populate({ path: 'user', select: 'username avatar contact_details' });
+
+    ads = expandedRaw.map((ad: estateDocument) => ({
+      ...ad.toObject(),
+      featured: checkFeaturedStatus(ad),
+    }));
 
     if (ads.length > 0) {
       return ads;

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { AuthRequest } from '../types/express';
 import { StatusCodes } from 'http-status-codes';
 import { BadRequestError, NotFoundError } from '../errors/custom';
 import { default as Ads, default as Estate } from '../models/estateModel';
@@ -6,7 +7,7 @@ import Review from '../models/reviewModel';
 import { checkPermissions } from '../utils/checkPermissions';
 import { queryFilters } from '../utils/global';
 
-export const createReview = async (req: Request, res: Response) => {
+export const createReview = async (req: AuthRequest, res: Response) => {
   const { estate: houseId } = req.body;
   const isValidEstate = await Estate.findOne({ _id: houseId });
 
@@ -29,7 +30,7 @@ export const createReview = async (req: Request, res: Response) => {
   res.status(StatusCodes.CREATED).json({ review });
 };
 
-export const retrieveAllReview = async (req: Request, res: Response) => {
+export const retrieveAllReview = async (req: AuthRequest, res: Response) => {
   const { limit, skip, page } = queryFilters(req);
   const review = await Review.find({})
     .sort('-createdAt')
@@ -43,12 +44,12 @@ export const retrieveAllReview = async (req: Request, res: Response) => {
           'title photo contact_details location _id taken category average_rating numOfReviews featured price description location',
       },
     ]);
-  const totalReviews = review.length;
+  const totalReviews = await Review.countDocuments({});
   const numOfPages = Math.ceil(totalReviews / limit);
   res.status(StatusCodes.OK).json({ page, numOfPages, totalReviews, review });
 };
 
-export const retrieveReview = async (req: Request, res: Response) => {
+export const retrieveReview = async (req: AuthRequest, res: Response) => {
   const { id: reviewId } = req.params;
   const review = await Review.findOne({ _id: reviewId }).populate([
     { path: 'user', select: 'first_name last_name avatar' },
@@ -62,7 +63,7 @@ export const retrieveReview = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ review });
 };
 
-export const updateReview = async (req: Request, res: Response) => {
+export const updateReview = async (req: AuthRequest, res: Response) => {
   const { id: reviewId } = req.params;
   const { rating, title, comment } = req.body;
   const review = await Review.findOne({ _id: reviewId });
@@ -87,7 +88,7 @@ export const updateReview = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ review, msg: 'Success! Review updated.' });
 };
 
-export const removeReview = async (req: Request, res: Response) => {
+export const removeReview = async (req: AuthRequest, res: Response) => {
   const { id: reviewId } = req.params;
   const review = await Review.findOne({ _id: reviewId });
 
@@ -106,7 +107,7 @@ export const removeReview = async (req: Request, res: Response) => {
   res.status(StatusCodes.CREATED).json({ msg: 'Success! Review removed.' });
 };
 
-export const retrieveEstateReviews = async (req: Request, res: Response) => {
+export const retrieveEstateReviews = async (req: AuthRequest, res: Response) => {
   const { id: houseId } = req.params;
   const { page, limit, skip } = queryFilters(req);
 

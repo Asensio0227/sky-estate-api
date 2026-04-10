@@ -6,7 +6,7 @@
     "rootDir": ".",
     "outDir": "dist",
 
-    "typeRoots": ["./node_modules/@types", "./@types"],
+    "typeRoots": ["./node_modules/@types"],
 
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -15,7 +15,7 @@
   },
   "include": [
     "index.ts",
-    "express.d.ts",
+    "types/**/*",
     "routes/**/*",
     "controller/**/*",
     "db/**/*",
@@ -23,7 +23,8 @@
     "middleware/**/*",
     "models/**/*",
     "utils/**/*",
-    "@types/**/*"
+    "@types/**/*",
+    "typings/**/*"
   ],
   "exclude": ["node_modules"]
 }

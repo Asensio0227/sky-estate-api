@@ -113,6 +113,8 @@ export const guestGetNearbyEstates = async (req: Request, res: Response) => {
     fetchMode = 'all',
   } = req.query;
 
+  const safeLimit = Math.min(Number(limit) || 20, 100);
+
   // Build match conditions for filters
   let matchConditions: any = { taken: false };
 
@@ -197,8 +199,8 @@ export const guestGetNearbyEstates = async (req: Request, res: Response) => {
       {
         $facet: {
           ads: [
-            { $skip: (Number(page) - 1) * Number(limit) },
-            { $limit: Number(limit) },
+            { $skip: (Number(page) - 1) * safeLimit },
+            { $limit: safeLimit },
           ],
           total: [{ $count: 'count' }],
         },
@@ -209,7 +211,7 @@ export const guestGetNearbyEstates = async (req: Request, res: Response) => {
       const result = await Ads.aggregate(pipeline as any[]);
       ads = result[0]?.ads || [];
       total = result[0]?.total[0]?.count || 0;
-      numOfPages = Math.ceil(total / Number(limit));
+      numOfPages = Math.ceil(total / safeLimit);
       if (ads.length > 0) {
         isNearbyData = true;
         hasMoreNearby = Number(page) < numOfPages;
@@ -223,7 +225,7 @@ export const guestGetNearbyEstates = async (req: Request, res: Response) => {
   if (fetchMode === 'all' || (fetchMode === 'nearby' && ads.length === 0)) {
     const fallbackData = await getAllEstates(
       Number(page),
-      Number(limit),
+      safeLimit,
       matchConditions
     );
     ads = fallbackData.ads;
@@ -258,6 +260,8 @@ export const guestGetRentals = async (req: Request, res: Response) => {
     latitude,
     longitude,
   } = req.query;
+
+  const safeLimit = Math.min(Number(limit) || 20, 100);
 
   let matchConditions: any = {
     listingType: 'rent',
@@ -333,8 +337,8 @@ export const guestGetRentals = async (req: Request, res: Response) => {
       {
         $facet: {
           ads: [
-            { $skip: (Number(page) - 1) * Number(limit) },
-            { $limit: Number(limit) },
+            { $skip: (Number(page) - 1) * safeLimit },
+            { $limit: safeLimit },
           ],
           total: [{ $count: 'count' }],
         },
@@ -345,7 +349,7 @@ export const guestGetRentals = async (req: Request, res: Response) => {
       const result = await Ads.aggregate(pipeline as any[]);
       ads = result[0]?.ads || [];
       total = result[0]?.total[0]?.count || 0;
-      numOfPages = Math.ceil(total / Number(limit));
+      numOfPages = Math.ceil(total / safeLimit);
     } catch (geoError) {
       console.error('Geo query failed for rentals:', geoError);
     }
@@ -355,7 +359,7 @@ export const guestGetRentals = async (req: Request, res: Response) => {
   if (ads.length === 0) {
     const fallbackData = await getAllEstates(
       Number(page),
-      Number(limit),
+      safeLimit,
       matchConditions
     );
     ads = fallbackData.ads;
@@ -382,6 +386,8 @@ export const guestSearchEstates = async (req: Request, res: Response) => {
     bedrooms,
     bathrooms,
   } = req.query;
+
+  const safeLimit = Math.min(Number(limit) || 20, 100);
 
   // Build match conditions
   let matchConditions: any = { taken: false };
@@ -461,8 +467,8 @@ export const guestSearchEstates = async (req: Request, res: Response) => {
       {
         $facet: {
           ads: [
-            { $skip: (Number(page) - 1) * Number(limit) },
-            { $limit: Number(limit) },
+            { $skip: (Number(page) - 1) * safeLimit },
+            { $limit: safeLimit },
           ],
           total: [{ $count: 'count' }],
         },
@@ -473,7 +479,7 @@ export const guestSearchEstates = async (req: Request, res: Response) => {
       const result = await Ads.aggregate(pipeline as any[]);
       ads = result[0]?.ads || [];
       total = result[0]?.total[0]?.count || 0;
-      numOfPages = Math.ceil(total / Number(limit));
+      numOfPages = Math.ceil(total / safeLimit);
     } catch (geoError) {
       console.error('Geo query failed for search:', geoError);
     }
@@ -483,7 +489,7 @@ export const guestSearchEstates = async (req: Request, res: Response) => {
   if (ads.length === 0) {
     const fallbackData = await getAllEstates(
       Number(page),
-      Number(limit),
+      safeLimit,
       matchConditions
     );
     ads = fallbackData.ads;

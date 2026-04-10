@@ -16,10 +16,23 @@ import {
   updateAd,
 } from '../controller/estateController';
 import { retrieveEstateReviews } from '../controller/reviewController';
+import {
+  authorizedPermissions,
+  authorizedToCreateAd,
+} from '../middleware/authenticatedUser';
 import { upload } from '../middleware/multerMiddleware';
 import { testingUser } from '../middleware/testingUser';
 
-router.post('/', testingUser, upload.array('media', 6), createAd);
+// super-admin, admin, member: always allowed
+// realtor: allowed only if realtorStatus === 'approved'
+// user / assistant: blocked
+router.post(
+  '/',
+  testingUser,
+  authorizedToCreateAd,
+  upload.array('media', 6),
+  createAd
+);
 router.get('/', retrieveAllAd);
 router.get('/user-ads', retrieveAllUserAd);
 router.get('/rent', getRentals);

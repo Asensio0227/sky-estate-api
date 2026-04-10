@@ -32,4 +32,6 @@ const notificationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model('Notifications', notificationSchema);
+notificationSchema.index({ userId: 1, createdAt: -1 });
+
+export default mongoose.model<INotifications>('Notifications', notificationSchema);

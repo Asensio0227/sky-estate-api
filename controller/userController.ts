@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { AuthRequest } from '../types/express';
 import { StatusCodes } from 'http-status-codes';
 import {
   BadRequestError,
@@ -16,7 +17,7 @@ interface QueryObject {
   [key: string]: any; // This allows for additional properties
 }
 
-export const getAllUsers = async (req: Request, res: Response) => {
+export const getAllUsers = async (req: AuthRequest, res: Response) => {
   let { search, sort, role, banned } = req.query;
   let queryObj: QueryObject = { isVerified: true };
 
@@ -49,14 +50,14 @@ export const getAllUsers = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ totalUsers, numOfPages, users, page });
 };
 
-export const showMeUser = async (req: Request, res: Response) => {
+export const showMeUser = async (req: AuthRequest, res: Response) => {
   const user = await User.findById(req.user?.userId).select(
     '-password -isVerified -verificationToken -verified '
   );
   res.status(StatusCodes.OK).json({ user });
 };
 
-export const getSingleUser = async (req: Request, res: Response) => {
+export const getSingleUser = async (req: AuthRequest, res: Response) => {
   const { id }: { id?: string } = req.params;
 
   if (!id) {
@@ -72,7 +73,7 @@ export const getSingleUser = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ user });
 };
 
-export const updateUser = async (req: Request, res: Response) => {
+export const updateUser = async (req: AuthRequest, res: Response) => {
   const newUser = { ...req.body };
   delete newUser.password;
   delete newUser.roles;
@@ -173,7 +174,7 @@ export const updateUser = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ user });
 };
 
-export const actionUser = async (req: Request, res: Response) => {
+export const actionUser = async (req: AuthRequest, res: Response) => {
   const { ban, role } = req.body;
 
   const user = await User.findOne({ _id: req.params.id }).select(
@@ -184,14 +185,14 @@ export const actionUser = async (req: Request, res: Response) => {
     throw new UnauthorizedError('No user found');
   }
 
-  if (ban) user.banned = ban;
-  if (role) user.role = role;
-  await user.save;
+  if (ban !== undefined) user.banned = ban;
+  if (role) user.role = role as string;
+  await user.save();
 
   res.status(StatusCodes.OK).json({ user });
 };
 
-export const updatePassword = async (req: Request, res: Response) => {
+export const updatePassword = async (req: AuthRequest, res: Response) => {
   const { oldPassword, newPassword } = req.body;
 
   if (!oldPassword || !newPassword) {
@@ -221,7 +222,7 @@ export const updatePassword = async (req: Request, res: Response) => {
     .json({ user, msg: 'Password updated successfully.' });
 };
 
-export const updateLocation = async (req: Request, res: Response) => {
+export const updateLocation = async (req: AuthRequest, res: Response) => {
   const { latitude, longitude } = req.body;
   const userId = req.user?.userId;
 
@@ -240,7 +241,7 @@ export const updateLocation = async (req: Request, res: Response) => {
     .json({ msg: 'Location updated successfully', user });
 };
 
-export const updateManualLocation = async (req: Request, res: Response) => {
+export const updateManualLocation = async (req: AuthRequest, res: Response) => {
   const { latitude, longitude } = req.body;
   const userId = req.user?.userId;
 

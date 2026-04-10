@@ -1,6 +1,7 @@
-import { NextFunction, Request, RequestHandler, Response } from 'express';
+import { NextFunction, Response } from 'express';
+import { AuthRequest } from '../types/express';
 import { StatusCodes } from 'http-status-codes';
-import { BadRequestError, NotFoundError } from '../errors/custom';
+import { BadRequestError, NotFoundError, UnauthorizedError } from '../errors/custom';
 import Ads, { estateDocument, UIEstateDocument } from '../models/estateModel';
 import User from '../models/userModel';
 import {
@@ -12,7 +13,10 @@ import {
   queryFilters,
 } from '../utils/global';
 
-export const createAd = async (req: Request, res: Response) => {
+// Safely coerce a query param that may be string | string[] → string | undefined
+const qs = (v: any): string | undefined => (typeof v === 'string' ? v : Array.isArray(v) ? v[0] : undefined);
+
+export const createAd = async (req: AuthRequest, res: Response) => {
   const userId = req.user?.userId;
   req.body.user = userId;
   const numericPrice = Number(req.body.price);
@@ -38,21 +42,12 @@ export const createAd = async (req: Request, res: Response) => {
   }
   let uris = [];
   const files: any = req.files;
-  console.log(`====create ad for houses==req.files===`);
-  console.log(req.files);
-  console.log(`====create ad for houses===req.files==`);
 
-  if (files) {
-    for (const file of files) {
-      const url = await imageUpload(file);
-      console.log(`====create ad for houses==url===`);
-      console.log(url);
-      console.log(`====create ad for houses===url==`);
-      uris.push(url);
-    }
+  if (files && files.length > 0) {
+    uris = await Promise.all(files.map((file: any) => imageUpload(file)));
   }
 
-  const user = await User.findOne({ _id: userId });
+  const user = await User.findOne({ _id: userId }).select('contact_details');
   const { contact_details: details }: any = user;
   if (user)
     req.body.contact_details = { ...details, ...req.body.contact_details };
@@ -65,8 +60,10 @@ export const createAd = async (req: Request, res: Response) => {
   res.status(StatusCodes.CREATED).json({ ads });
 };
 
-export const retrieveAllAd = async (req: Request, res: Response) => {
-  let { search, sort, category } = req.query;
+export const retrieveAllAd = async (req: AuthRequest, res: Response) => {
+  const search = qs(req.query.search);
+  const sort    = qs(req.query.sort);
+  const category = qs(req.query.category);
   const userId: string | any = req.user?.userId;
   const user = await User.findOne({ _id: userId });
 
@@ -88,27 +85,30 @@ export const retrieveAllAd = async (req: Request, res: Response) => {
 
   let filteredAds;
 
+  const sortKeys = 'title';
+  const sortParam = isValidSortKey(sort) ? sort : 'string';
+  const { sortKey, skip, limit, page } = queryFilters(req, sortParam, sortKeys);
+
   if (isFirstTime) {
     queryObj = {};
   } else if (
     (typeof search === 'string' && search.trim()) ||
     (typeof category === 'string' && category.trim() !== 'all')
   ) {
-    filteredAds = await Ads.find(queryObj).sort('-createdAt');
+    filteredAds = await Ads.find(queryObj)
+      .sort('-createdAt')
+      .skip(skip)
+      .limit(limit)
+      .populate({ path: 'user', select: 'username avatar email lastSeen status' });
   } else {
     queryObj = {
       location: {
         $geoWithin: {
           $centerSphere: [userLocation, 50 / 6378.1],
-          key: 'location',
         },
       },
     };
   }
-
-  const sortKeys = 'title';
-  const sortParam = isValidSortKey(sort) ? sort : 'string';
-  const { sortKey, skip, limit, page } = queryFilters(req, sortParam, sortKeys);
 
   let maxRadius = 500000;
   let initialRadius = 200;
@@ -133,11 +133,13 @@ export const retrieveAllAd = async (req: Request, res: Response) => {
   }
   res
     .status(StatusCodes.OK)
-    .json({ totalAds, numOfPages, filteredAds, page, ads });
+    .json({ totalAds, numOfPages, ads: filteredAds ?? ads, page });
 };
 
-export const retrieveAllUserAd = async (req: Request, res: Response) => {
-  let { search, sort, category } = req.query;
+export const retrieveAllUserAd = async (req: AuthRequest, res: Response) => {
+  const search = qs(req.query.search);
+  const sort    = qs(req.query.sort);
+  const category = qs(req.query.category);
   let queryObj: any = {
     user: req.user?.userId,
   };
@@ -153,7 +155,7 @@ export const retrieveAllUserAd = async (req: Request, res: Response) => {
   const sortKeys = 'title';
   const sortParam = isValidSortKey(sort) ? sort : 'string';
   const { sortKey, skip, limit, page } = queryFilters(req, sortParam, sortKeys);
-  let ads = await Ads.find(queryObj)
+  const results = await Ads.find(queryObj)
     .sort(sortKey)
     .skip(skip)
     .limit(limit)
@@ -162,19 +164,17 @@ export const retrieveAllUserAd = async (req: Request, res: Response) => {
       select: 'username avatar email lastSeen status',
     });
 
-  await Promise.all(
-    ads.map(async (ad: estateDocument) => {
-      ad.featured = checkFeaturedStatus(ad);
-      await ad.save();
-    }),
-  );
+  const ads = results.map((ad: estateDocument) => ({
+    ...ad.toObject(),
+    featured: checkFeaturedStatus(ad),
+  }));
 
   const totalAds = await Ads.countDocuments(queryObj);
   const numOfPages = Math.ceil(totalAds / limit);
   res.status(StatusCodes.OK).json({ totalAds, numOfPages, ads, page });
 };
 
-export const retrieveAd = async (req: Request, res: Response) => {
+export const retrieveAd = async (req: AuthRequest, res: Response) => {
   const ad = await Ads.findOne({ _id: req.params.id }).populate([
     'reviews',
     { path: 'user', select: 'username avatar email status lastSeen' },
@@ -187,29 +187,26 @@ export const retrieveAd = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ ad });
 };
 
-export const updateAd = async (req: Request, res: Response) => {
+export const updateAd = async (req: AuthRequest, res: Response) => {
   const newAd = { ...req.body };
   const id = req.params.id;
   const numericPrice = newAd.price ? Number(newAd.price) : undefined;
   const numericRentPrice = newAd.rentPrice
     ? Number(newAd.rentPrice)
     : undefined;
-  const ad = await Ads.findOne({ _id: id });
+  const ad = await Ads.findOne({ _id: id, user: req.user?.userId });
   if (!ad) {
-    throw new NotFoundError(`No ad with id : ${req.params.id}`);
+    throw new UnauthorizedError('Not allowed');
   }
 
   let uris = [];
   const files: any = req.files;
 
-  if (files) {
-    for (const file of files) {
-      const url = await imageUpload(file);
-      uris.push(url);
-    }
+  if (files && files.length > 0) {
+    uris = await Promise.all(files.map((file: any) => imageUpload(file)));
   }
 
-  const user = await User.findOne({ _id: req.user?.userId });
+  const user = await User.findOne({ _id: req.user?.userId }).select('contact_details');
   const { contact_details: details }: any = user;
 
   if (newAd.contact_details)
@@ -249,20 +246,20 @@ export const updateAd = async (req: Request, res: Response) => {
   res.status(StatusCodes.CREATED).json({ ad });
 };
 
-export const deleteAd = async (req: Request, res: Response) => {
+export const deleteAd = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
-  const ad = await Ads.findById(id);
+  const ad = await Ads.findOne({ _id: id, user: req.user?.userId });
 
   if (!ad) {
-    throw new NotFoundError(`No ad with id : ${req.params.id}`);
+    throw new UnauthorizedError('Not allowed');
   }
 
   await ad.deleteOne();
   res.status(StatusCodes.OK).json({ msg: 'Success! ad removed.' });
 };
 
-export const markAsTaken = async (req: Request, res: Response) => {
+export const markAsTaken = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const ad = await Ads.findOne({ _id: id });
   if (!ad) {
@@ -315,7 +312,7 @@ const isValidCoordinates = (coordinates: number[]): boolean => {
   );
 };
 
-export const getRentals = async (req: Request, res: Response) => {
+export const getRentals = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
     const user = await User.findOne({ _id: userId });
@@ -440,7 +437,7 @@ export const getRentals = async (req: Request, res: Response) => {
   }
 };
 
-export const searchEstates = async (req: Request, res: Response) => {
+export const searchEstates = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
     const user = await User.findOne({ _id: userId });
@@ -588,7 +585,7 @@ export const searchEstates = async (req: Request, res: Response) => {
 // ============================================
 // COMPLETE getNearbyEstates FUNCTION
 // ============================================
-export const getNearbyEstates = async (req: Request, res: Response) => {
+export const getNearbyEstates = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
     const user = await User.findOne({ _id: userId });
@@ -760,13 +757,13 @@ export const getNearbyEstates = async (req: Request, res: Response) => {
 // ATOMIC INCREMENT AD VIEW
 // ============================================
 export const incrementAdView = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction,
 ) => {
   try {
     const { id: estateId } = req.params;
-    const userId = (req as any).user?.userId;
+    const userId = req.user?.userId;
 
     // If no userId (guest or unauthenticated), just return current view count
     if (!userId) {
@@ -817,50 +814,42 @@ export const incrementAdView = async (
 // ATOMIC TOGGLE LIKE AD
 // ============================================
 export const toggleLikeAd = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction,
 ) => {
   try {
     const { id: estateId } = req.params;
-    const userId = (req as any).user?.userId;
+    const userId = req.user?.userId;
 
     if (!userId) {
       throw new NotFoundError('User not authenticated');
     }
 
-    // First, check if user already liked the estate
-    const estate: any = await Ads.findById(estateId).select('likedBy');
-
-    if (!estate) {
-      throw new NotFoundError('Estate not found');
-    }
-
-    const isLiked = estate.likedBy.some((id: any) => id.toString() === userId);
-
-    // Single atomic operation based on current state
-    const result = await Ads.findByIdAndUpdate(
-      estateId,
-      isLiked
-        ? {
-            // UNLIKE: Remove user and decrement count
-            $pull: { likedBy: userId },
-            $inc: { likeCount: -1 },
-          }
-        : {
-            // LIKE: Add user and increment count
-            $addToSet: { likedBy: userId },
-            $inc: { likeCount: 1 },
-          },
-      {
-        new: true,
-        select: 'likeCount',
-      },
+    // Atomic: try to unlike first
+    const unlikeResult = await Ads.updateOne(
+      { _id: estateId, likedBy: userId },
+      { $pull: { likedBy: userId }, $inc: { likeCount: -1 } }
     );
 
+    let liked: boolean;
+    if (unlikeResult.modifiedCount === 0) {
+      // User had not liked — add like
+      await Ads.updateOne(
+        { _id: estateId },
+        { $addToSet: { likedBy: userId }, $inc: { likeCount: 1 } }
+      );
+      liked = true;
+    } else {
+      liked = false;
+    }
+
+    const estate = await Ads.findById(estateId).select('likeCount');
+    if (!estate) throw new NotFoundError('Estate not found');
+
     res.status(StatusCodes.OK).json({
-      liked: !isLiked,
-      likeCount: result?.likeCount || 0,
+      liked,
+      likeCount: estate.likeCount || 0,
     });
   } catch (error) {
     next(error);

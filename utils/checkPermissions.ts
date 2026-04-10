@@ -6,7 +6,9 @@ export const checkPermissions = (
   resourceUserId: string
 ) => {
   if (
+    requestUser.role === 'super-admin' ||
     requestUser.role === 'admin' ||
+    requestUser.role === 'realtor' ||
     requestUser.role === 'member' ||
     requestUser.role === 'assistant'
   )

@@ -32,6 +32,6 @@ export class UnauthorizedError extends customError {
 export class UnauthenticatedError extends customError {
   constructor(message: string) {
     super(message);
-    this.statusCodes = StatusCodes.FORBIDDEN;
+    this.statusCodes = StatusCodes.UNAUTHORIZED;
   }
 }

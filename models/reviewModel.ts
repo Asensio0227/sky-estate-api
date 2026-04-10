@@ -57,6 +57,7 @@ const reviewSchema = new mongoose.Schema(
 );
 
 reviewSchema.index({ estate: 1, user: 1 }, { unique: true });
+reviewSchema.index({ estate: 1, createdAt: -1 });
 
 reviewSchema.statics.calculateAverageRating = async function (estateId: any) {
   const result = await this.aggregate([

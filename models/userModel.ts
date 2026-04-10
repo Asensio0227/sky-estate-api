@@ -46,12 +46,23 @@ export interface UIUser extends Document {
   username: modalTypes | string;
   gender: modalTypes;
   ideaNumber: modalTypes;
-  role: modalTypes;
+  role: string;
   status: statusOption.offline;
   date_of_birth: modalTypes;
   physical_address: addressOb | any;
   contact_details: ContactOb | any;
   userAds_address: any;
+}
+
+
+export type RealtorStatus = 'none' | 'pending' | 'approved' | 'rejected';
+
+export interface RealtorApplication {
+  agencyName?: string;
+  licenseNumber: string;
+  documents: string[];
+  experience?: string;
+  submittedAt: Date;
 }
 
 export interface UserDocument extends UIUser, mongoose.Document {
@@ -72,6 +83,8 @@ export interface UserDocument extends UIUser, mongoose.Document {
   embedding_text: String;
   embedding: any;
   currentLocation?: Location;
+  realtorStatus: RealtorStatus;
+  realtorApplication?: RealtorApplication;
   ComparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -199,7 +212,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
     },
     role: {
       type: String,
-      enum: ['admin', 'user', 'member', 'assistant'],
+      enum: ['super-admin', 'admin', 'realtor', 'user', 'member', 'assistant'],
       default: 'user',
     },
     verified: {
@@ -218,6 +231,18 @@ const userSchema = new mongoose.Schema<UserDocument>(
     verificationToken: {
       type: Number,
     },
+    realtorStatus: {
+      type: String,
+      enum: ['none', 'pending', 'approved', 'rejected'],
+      default: 'none',
+    },
+    realtorApplication: {
+      agencyName: { type: String, trim: true },
+      licenseNumber: { type: String, trim: true },
+      documents: [{ type: String }],
+      experience: { type: String, trim: true },
+      submittedAt: { type: Date },
+    },
     embedding_text: String,
     embedding: { type: [Number], index: '2dsphere' },
     lastSeen: { type: Date },
@@ -226,7 +251,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
       coordinates: { type: [Number], index: '2dsphere' },
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 // AI
 // userSchema.index(
@@ -235,6 +260,8 @@ const userSchema = new mongoose.Schema<UserDocument>(
 // );
 userSchema.index({ userAds_address: '2dsphere' });
 userSchema.index({ currentLocation: '2dsphere' });
+userSchema.index({ isVerified: 1, role: 1 });
+userSchema.index({ realtorStatus: 1 });
 
 userSchema.pre('save', async function (this: UserDocument) {
   if (!this.isModified('password')) return;
@@ -243,7 +270,7 @@ userSchema.pre('save', async function (this: UserDocument) {
 });
 
 userSchema.methods.ComparePassword = async function (
-  candidatePassword: string
+  candidatePassword: string,
 ): Promise<boolean> {
   return await bcrypt.compare(candidatePassword, this.password);
 };

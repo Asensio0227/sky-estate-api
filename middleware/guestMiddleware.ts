@@ -1,10 +1,11 @@
 import { NextFunction, Request, Response } from 'express';
+import { AuthRequest } from '../types/express';
 import mongoose from 'mongoose';
 import { UnauthenticatedError } from '../errors/custom';
 import User, { UserDocument } from '../models/userModel';
 
 export const guestAuthMiddleware = async (
-  req: Request | any,
+  req: AuthRequest,
   res: Response,
   next: NextFunction,
 ) => {

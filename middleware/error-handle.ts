@@ -17,10 +17,9 @@ const errorHandleMiddleware = (
   };
 
   if (err.name === 'ValidationError') {
-    const customError = { msg: '', statusCode: 0 };
     customError.msg = Object.values(err.errors)
       .map((item: any) => item.message)
-      .join(',');
+      .join(', ');
     customError.statusCode = 400;
   }
 

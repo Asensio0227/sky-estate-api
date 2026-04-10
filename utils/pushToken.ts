@@ -1,87 +1,89 @@
 import Expo, { ExpoPushTicket } from 'expo-server-sdk';
-import { Request } from 'express';
-import { BadRequestError } from '../errors/custom';
 import Notification from '../models/notificationsModel';
 import { UserDocument } from '../models/userModel';
+import { AuthRequest } from '../types/express'; // ← swap Request for AuthRequest
 
 const expo = new Expo();
 
-export const sendNotification = async (req: Request, user: UserDocument) => {
-  const { message } = req.body;
-  const targetExpoToken = user.expoToken;
+export const sendNotification = async (
+  req: AuthRequest, // ← was: req: Request
+  message: any,
+): Promise<any[] | null> => {
+  const targetUserId = (message as UserDocument)?._id
+    ? (message as UserDocument)._id
+    : req.body?.userId;
 
-  if (!Expo.isExpoPushToken(targetExpoToken)) {
-    throw new BadRequestError(`Invalid Expo token: ${targetExpoToken}`);
+  const targetToken: string | undefined =
+    (message as UserDocument)?.expoToken ?? req.body?.expoToken;
+
+  if (!targetToken || !Expo.isExpoPushToken(targetToken)) {
+    console.warn(`Invalid or missing Expo token — notification skipped`);
+    return null;
   }
-  const notificationBody = getNotificationBody(message);
+
+  const body = getNotificationBody(message);
+
   const chunks = expo.chunkPushNotifications([
     {
-      to: targetExpoToken,
+      to: targetToken,
       sound: 'default',
       title: 'New Message',
-      body: notificationBody,
-      data: message,
+      body,
+      data: typeof message === 'object' ? message : {},
     },
   ]);
-  return await sendChunks(chunks, req, user, message);
+
+  return sendChunks(chunks, req, targetToken, targetUserId, message);
 };
 
 const sendChunks = async (
   chunks: any,
-  req: Request,
-  user: UserDocument,
-  message: object
-) => {
-  const notifications = [];
+  req: AuthRequest, // ← was: req: Request
+  targetToken: string,
+  userId: any,
+  message: object,
+): Promise<any[]> => {
+  const notifications: any[] = [];
 
   for (const chunk of chunks) {
-    console.log(chunk);
     try {
-      const response: ExpoPushTicket[] = await expo.sendPushNotificationsAsync(
-        chunk
-      );
-      console.log(
-        `Successfully sent push notification to ${chunk.length} devices: ${
-          response.filter((ticket) => ticket.status === 'ok').length
-        }`
-      );
+      const response: ExpoPushTicket[] =
+        await expo.sendPushNotificationsAsync(chunk);
+
+      const okCount = response.filter((t) => t.status === 'ok').length;
+      console.log(`Push sent — ${okCount}/${chunk.length} ok`);
+
       const notify = await Notification.create({
-        expoPushToken: user.expoToken || chunk[0].to,
+        expoPushToken: targetToken,
         message,
-        userId: user._id,
-        createdBy: req.user?.userId,
-        status: response[0].status,
+        userId,
+        createdBy: req.user?.userId, // ← now resolves correctly
+        status: response[0]?.status ?? 'unknown',
         tokenId: response,
       });
+
       notifications.push(notify);
     } catch (error) {
-      console.log(
-        `Error sending push notification to chunk: ${chunk.length}`,
-        error
-      );
-      const failedNotification = new Notification({
-        expoPushToken: chunk[0].to,
+      console.error(`Push chunk failed:`, error);
+      await new Notification({
+        expoPushToken: targetToken,
         message,
+        userId,
         status: 'failed',
-      });
-      await failedNotification.save();
+      }).save();
     }
   }
+
   return notifications;
 };
 
 const getNotificationBody = (message: any): string => {
-  if (message?.text && message.text.trim() !== '') {
-    return message.text;
-  }
-
-  if (Array.isArray(message.audio) && message.audio.length > 0) {
-    return '🎵 Audio message';
-  }
-
-  if (Array.isArray(message.video) && message.video.length > 0) {
-    return '📹 Video message';
-  }
-
-  return '📦 New message received';
+  if (message?.text && message.text.trim() !== '') return message.text;
+  if (Array.isArray(message?.audio) && message.audio.length > 0)
+    return 'Audio message';
+  if (Array.isArray(message?.video) && message.video.length > 0)
+    return 'Video message';
+  if (Array.isArray(message?.photo) && message.photo.length > 0)
+    return 'Photo message';
+  return 'New message received';
 };

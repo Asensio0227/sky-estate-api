@@ -1,10 +1,11 @@
 import Expo from 'expo-server-sdk';
 import { Request, Response } from 'express';
+import { AuthRequest } from '../types/express';
 import { StatusCodes } from 'http-status-codes';
 import { UnauthorizedError } from '../errors/custom';
 import User, { UserDocument } from '../models/userModel';
 
-export const createPushToken = async (req: Request, res: Response) => {
+export const createPushToken = async (req: AuthRequest, res: Response) => {
   const user: UserDocument | any = await User.findById(req.user?.userId);
 
   if (!user) throw new UnauthorizedError('Invalid user.');

@@ -9,12 +9,8 @@ const createJwt = ({ payload }: { payload: any }) => {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET must be defined');
   }
-  const lifetime: any = process.env.JWT_LIFETIME;
-
-  if (!lifetime) {
-    throw new Error('JWR_LIFETIME must be defined');
-  }
-  const token = jwt.sign(payload, process.env.JWT_SECRET, {
+  const lifetime = (process.env.JWT_ACCESS_LIFETIME || '15m') as jwt.SignOptions['expiresIn'];
+  const token = jwt.sign(payload, process.env.JWT_SECRET as string, {
     expiresIn: lifetime,
   });
   return token;
@@ -24,14 +20,8 @@ const createRefreshToken = ({ payload }: { payload: any }) => {
   if (!process.env.JWT_SECRET_REFRESH) {
     throw new Error('JWT_SECRET_REFRESH must be defined');
   }
-
-  const lifetime: any = process.env.JWT_LIFETIME;
-
-  if (!lifetime) {
-    throw new Error('JWR_LIFETIME must be defined');
-  }
-
-  const token = jwt.sign(payload, process.env.JWT_SECRET_REFRESH, {
+  const lifetime = (process.env.JWT_REFRESH_LIFETIME || '7d') as jwt.SignOptions['expiresIn'];
+  const token = jwt.sign(payload, process.env.JWT_SECRET_REFRESH as string, {
     expiresIn: lifetime,
   });
   return token;
@@ -53,6 +43,7 @@ export const attachCookiesToResponse = ({
   const oneDay = 1000 * 60 * 60 * 24;
   const longerExp = 1000 * 60 * 60 * 24 * 7;
 
+  // Web: set httpOnly signed cookies
   res.cookie('access_token', accessTokenJWT, {
     httpOnly: true,
     expires: new Date(Date.now() + oneDay),
@@ -66,6 +57,13 @@ export const attachCookiesToResponse = ({
     secure: process.env.NODE_ENV === 'production',
     signed: true,
   });
+
+  // Expo / mobile: attach tokens to res.locals so controllers can include
+  // them in the JSON response body. Store in Expo SecureStore on the client.
+  res.locals.tokens = {
+    access_token: accessTokenJWT,
+    refresh_token: refreshTokenJWT,
+  };
 };
 
 export const createTokenUser = (user: UserDocument | any) => {
@@ -87,7 +85,7 @@ export const createTokenUser = (user: UserDocument | any) => {
 };
 
 export const hashString = (hash: string): string =>
-  crypto.createHash('md5').update(hash).digest('hex');
+  crypto.createHash('sha256').update(hash).digest('hex');
 
 export const isTokenValid = (token: string, value: string): AuthJwtPayload => {
   if (!token || !value) {

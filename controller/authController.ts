@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { Request, Response } from 'express';
+import { AuthRequest } from '../types/express';
 import { StatusCodes } from 'http-status-codes';
 
 import {
@@ -13,7 +14,7 @@ import { sendResetPasswordEmail, sendVerificationEmail } from '../utils/email';
 import { imageUpload } from '../utils/global';
 import { attachCookiesToResponse, createTokenUser } from '../utils/jwt';
 
-export const register = async (req: Request, res: Response) => {
+export const register = async (req: AuthRequest, res: Response) => {
   const emailAlreadyExists = await User.findOne({ email: req.body.email });
 
   if (emailAlreadyExists) {
@@ -55,8 +56,8 @@ export const register = async (req: Request, res: Response) => {
     }
   }
 
-  const isFirstAccount = (await User.countDocuments({})) === 0;
-  const role = isFirstAccount ? 'admin' : 'user';
+  const isFirstAccount = !(await User.exists({}));
+  const role = isFirstAccount ? 'super-admin' : 'user';
   const min = parseFloat(process.env.CRYPTO_MIN as any);
   const max = parseFloat(process.env.CRYPTO_MAX as any);
   const verificationToken = crypto.randomInt(min, max + 1);
@@ -117,7 +118,7 @@ export const register = async (req: Request, res: Response) => {
     .status(StatusCodes.CREATED)
     .json({ msg: 'Success! Please check your email to verify account' });
 };
-export const resendCode = async (req: Request, res: Response) => {
+export const resendCode = async (req: AuthRequest, res: Response) => {
   const user = await User.findOne({ email: req.body.email });
 
   if (!user) {
@@ -138,7 +139,7 @@ export const resendCode = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ msg: 'code sent' });
 };
 
-export const verifyEmail = async (req: Request, res: Response) => {
+export const verifyEmail = async (req: AuthRequest, res: Response) => {
   const { verificationToken, email } = req.body;
   const user = await User.findOne({ email });
 
@@ -158,7 +159,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ msg: 'Email verified!' });
 };
 
-export const login = async (req: Request, res: Response) => {
+export const login = async (req: AuthRequest, res: Response) => {
   const { username, password, expoToken, userAds_address } = req.body;
 
   if (!username || !password) {
@@ -237,7 +238,7 @@ export const login = async (req: Request, res: Response) => {
     }
     refreshToken = existingToken.refreshToken;
     attachCookiesToResponse({ res, user: tokenUser, refreshToken });
-    res.status(StatusCodes.OK).json({ user: tokenUser, refreshToken });
+    res.status(StatusCodes.OK).json({ user: tokenUser, refreshToken, ...res.locals.tokens });
     return;
   }
 
@@ -247,10 +248,10 @@ export const login = async (req: Request, res: Response) => {
   const userToken = { refreshToken, ip, userAgent, user: user._id };
   await Token.create(userToken);
   attachCookiesToResponse({ res, user: tokenUser, refreshToken });
-  res.status(StatusCodes.OK).json({ user: tokenUser, refreshToken });
+  res.status(StatusCodes.OK).json({ user: tokenUser, refreshToken, ...res.locals.tokens });
 };
 
-export const logout = async (req: Request, res: Response) => {
+export const logout = async (req: AuthRequest, res: Response) => {
   const id = req.user?.userId;
 
   // Use $set and $unset properly
@@ -279,7 +280,7 @@ export const logout = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ msg: 'logging out....' });
 };
 
-export const forgotPassword = async (req: Request, res: Response) => {
+export const forgotPassword = async (req: AuthRequest, res: Response) => {
   const { email } = req.body;
 
   if (!email) {
@@ -299,7 +300,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
       token: passwordToken,
     });
 
-    const tenMinutes = 1000 * 60 * 2;
+    const tenMinutes = 1000 * 60 * 10;
     const passwordTokenExpirationDate = new Date(Date.now() + tenMinutes);
     user.passwordToken = passwordToken;
     user.passwordTokenExpirationDate = passwordTokenExpirationDate;
@@ -310,7 +311,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
     .json({ msg: 'Please check your email for reset password code.' });
 };
 
-export const resetPassword = async (req: Request, res: Response) => {
+export const resetPassword = async (req: AuthRequest, res: Response) => {
   const { token, email, password } = req.body;
 
   if (!token || !email || !password) {
@@ -341,7 +342,7 @@ export const resetPassword = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ msg: 'Success! Reset password.' });
 };
 
-export const guestLogin = async (req: Request, res: Response) => {
+export const guestLogin = async (req: AuthRequest, res: Response) => {
   const GUEST_USERNAME = process.env.GUEST_USERNAME;
   const GUEST_PASSWORD = process.env.GUEST_PASSWORD;
 
@@ -426,7 +427,7 @@ export const guestLogin = async (req: Request, res: Response) => {
       }
       refreshToken = existingToken.refreshToken;
       attachCookiesToResponse({ res, user: tokenUser, refreshToken });
-      res.status(StatusCodes.OK).json({ user: tokenUser, refreshToken });
+      res.status(StatusCodes.OK).json({ user: tokenUser, refreshToken, ...res.locals.tokens });
       return;
     }
 
@@ -436,8 +437,8 @@ export const guestLogin = async (req: Request, res: Response) => {
     const userToken = { refreshToken, ip, userAgent, user: user._id };
     await Token.create(userToken);
     attachCookiesToResponse({ res, user: tokenUser, refreshToken });
-    res.status(StatusCodes.OK).json({ user: tokenUser, refreshToken });
+    res.status(StatusCodes.OK).json({ user: tokenUser, refreshToken, ...res.locals.tokens });
   } catch (error: any) {
-    throw new BadRequestError('Guest login failed');
+    throw error;
   }
 };

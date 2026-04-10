@@ -1,19 +1,10 @@
 import mongoose from 'mongoose';
 import { IPhoto } from './estateModel';
 
-export interface User {
-  id?: string | number;
-  _id?: string | number;
-  username?: string;
-  email?: string;
-  avatar?: string;
-  expoToken?: string;
-}
-
 export interface IMessage extends mongoose.Document {
-  _id: string | number;
+  _id: mongoose.Types.ObjectId;
   text?: string;
-  user: User | string;
+  user: mongoose.Types.ObjectId;
   photo: IPhoto[];
   video?: IPhoto[];
   audio?: IPhoto[];
@@ -22,51 +13,25 @@ export interface IMessage extends mongoose.Document {
   sent?: boolean;
   received?: boolean;
   pending?: boolean;
+  isRead?: boolean;
+  readAt?: Date;
   quickReplies?: any;
-  roomId: string;
+  roomId: mongoose.Types.ObjectId;
 }
-const messageSchema = new mongoose.Schema(
+
+const mediaItemSchema = {
+  id:   { type: String },
+  url:  { type: String },
+  name: { type: String },
+};
+
+const messageSchema = new mongoose.Schema<IMessage>(
   {
-    text: {
-      type: String,
-    },
-    photo: {
-      type: [
-        {
-          id: { type: String },
-          url: { type: String },
-          name: { type: String },
-        },
-      ],
-    },
-    audio: {
-      type: [
-        {
-          id: { type: String },
-          url: { type: String },
-          name: { type: String },
-        },
-      ],
-    },
-    video: {
-      type: [
-        {
-          id: { type: String },
-          url: { type: String },
-          name: { type: String },
-        },
-      ],
-    },
-    file: {
-      type: [
-        {
-          id: { type: String },
-          url: { type: String },
-          name: { type: String },
-        },
-      ],
-      default: [],
-    },
+    text: { type: String },
+    photo:  { type: [mediaItemSchema], default: [] },
+    audio:  { type: [mediaItemSchema], default: [] },
+    video:  { type: [mediaItemSchema], default: [] },
+    file:   { type: [mediaItemSchema], default: [] },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -77,12 +42,17 @@ const messageSchema = new mongoose.Schema(
       ref: 'Room',
       required: true,
     },
-    sent: { type: Boolean, default: false },
+    sent:    { type: Boolean, default: false },
     pending: { type: Boolean, default: false },
-    received: { type: Boolean, default: false },
-    isRead: { type: Boolean, default: false },
+    received:{ type: Boolean, default: false },
+    isRead:  { type: Boolean, default: false },
+    // BONUS — readAt timestamp for precise delivery tracking
+    readAt:  { type: Date, default: null },
   },
   { timestamps: true },
 );
 
-export default mongoose.model('Message', messageSchema);
+// BONUS — compound index: most common query pattern for fetching chat history
+messageSchema.index({ roomId: 1, createdAt: -1 });
+
+export default mongoose.model<IMessage>('Message', messageSchema);

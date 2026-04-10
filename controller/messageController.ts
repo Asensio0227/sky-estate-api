@@ -3,14 +3,16 @@ import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { NotFoundError, UnauthorizedError } from '../errors/custom';
 import Message from '../models/messageModel';
-import Room, { RoomType } from '../models/roomModel';
+import Room from '../models/roomModel';
+import { AuthRequest } from '../types/express';
 import { imageUpload, queryFilters } from '../utils/global';
+import { sendNotification } from '../utils/pushToken';
 
-// For images/audio/video — use your existing imageUpload (resource_type:'image'/'video'/'audio')
-// For PDFs, DOCs, ZIPs etc — Cloudinary requires resource_type:'raw', imageUpload() will 500
+// ─── File Upload Helper ───────────────────────────────────────────────────────
+
 const uploadAnyFile = async (
   file: any,
-): Promise<{ url: string; id?: string }> => {
+): Promise<{ url: string; id?: string; name: string }> => {
   const mimeType: string = file.mimetype || '';
   const isMedia =
     mimeType.startsWith('image/') ||
@@ -25,63 +27,86 @@ const uploadAnyFile = async (
     ].includes(mimeType);
 
   if (isMedia) {
-    return imageUpload(file);
+    const result = await imageUpload(file);
+    return { ...result, name: file.originalname };
   }
 
-  // Non-media file (PDF, DOC, ZIP etc) — upload as raw
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       { resource_type: 'raw', folder: 'chat_files' },
       (error, result) => {
         if (error || !result)
           return reject(error ?? new Error('Cloudinary upload failed'));
-        resolve({ url: result.secure_url, id: result.public_id });
+        resolve({
+          url: result.secure_url,
+          id: result.public_id,
+          name: file.originalname,
+        });
       },
     );
     stream.end(file.buffer);
   });
 };
 
-export const sendMsg = async (req: Request, res: Response) => {
-  const fileTypes: any = {
+// ─── MIME classifier ──────────────────────────────────────────────────────────
+
+const classifyMime = (
+  mimeType: string,
+): 'audio' | 'video' | 'photo' | 'file' => {
+  if (
+    mimeType.startsWith('audio/') ||
+    [
+      'audio/x-m4a',
+      'audio/mp4',
+      'audio/mpeg',
+      'audio/ogg',
+      'audio/wav',
+    ].includes(mimeType)
+  )
+    return 'audio';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('image/')) return 'photo';
+  return 'file';
+};
+
+// ─── Shared participant guard ─────────────────────────────────────────────────
+// Throws UnauthorizedError when the calling user is not in the room.
+
+const assertParticipant = async (roomId: string, userEmail: string) => {
+  const room = await Room.findOne({
+    _id: roomId,
+    participantsArray: { $in: [userEmail] },
+  });
+  if (!room) throw new UnauthorizedError('Not a room participant');
+  return room;
+};
+
+// ─── sendMsg ──────────────────────────────────────────────────────────────────
+
+export const sendMsg = async (req: AuthRequest, res: Response) => {
+  // FIX #2 — verify sender belongs to the room before anything else
+  await assertParticipant(req.body.roomId, req.user?.email as string);
+
+  const rawFiles: any = req.files || {};
+  const allFiles: any[] = [
+    ...(Array.isArray(rawFiles) ? rawFiles : []),
+    ...(rawFiles['media'] || []),
+    ...(rawFiles['files'] || []),
+  ];
+
+  // FIX #6 — run all uploads in parallel
+  const uploaded = await Promise.all(allFiles.map(uploadAnyFile));
+
+  const fileTypes: Record<'audio' | 'video' | 'photo' | 'file', any[]> = {
     audio: [],
     video: [],
     photo: [],
     file: [],
   };
-  // upload.fields() returns { media: File[], files: File[] } — not a flat array
-  // Merge all field arrays into one list for uniform processing
-  const rawFiles: any = req.files || {};
-  const allFiles: any[] = [
-    ...(Array.isArray(rawFiles) ? rawFiles : []), // upload.array() fallback
-    ...(rawFiles['media'] || []), // images/audio/video
-    ...(rawFiles['files'] || []), // documents/PDFs
-  ];
 
-  for (const file of allFiles) {
-    const { url, id } = await uploadAnyFile(file);
-    const mimeType: string = file.mimetype || '';
-    const mediaItem = { url, id, name: file.originalname };
-
-    if (
-      mimeType.startsWith('audio/') ||
-      [
-        'audio/x-m4a',
-        'audio/mp4',
-        'audio/mpeg',
-        'audio/ogg',
-        'audio/wav',
-      ].includes(mimeType)
-    ) {
-      fileTypes.audio.push(mediaItem);
-    } else if (mimeType.startsWith('video/')) {
-      fileTypes.video.push(mediaItem);
-    } else if (mimeType.startsWith('image/')) {
-      fileTypes.photo.push(mediaItem);
-    } else {
-      fileTypes.file.push(mediaItem);
-    }
-  }
+  uploaded.forEach((item, i) => {
+    fileTypes[classifyMime(allFiles[i].mimetype || '')].push(item);
+  });
 
   const newMsg = await Message.create({
     ...req.body,
@@ -93,20 +118,29 @@ export const sendMsg = async (req: Request, res: Response) => {
     sent: true,
   });
 
-  // ✅ Use findOneAndUpdate instead of room.save() to avoid Mongoose
-  // optimistic concurrency version conflicts (VersionError) when multiple
-  // requests update the same room document concurrently.
+  // Update lastMessage as an ObjectId ref (matches updated roomModel)
   await Room.findOneAndUpdate(
     { _id: req.body.roomId },
-    { $set: { lastMessage: newMsg } },
+    { $set: { lastMessage: newMsg._id } },
     { new: true },
   );
+
+  // FIX #9 — fire-and-forget: slow Expo API must not block the response
+  sendNotification(req, newMsg).catch(console.error);
 
   res.status(StatusCodes.CREATED).json({ newMsg });
 };
 
-export const retrieveMsg = async (req: Request, res: Response) => {
+// ─── retrieveMsg ─────────────────────────────────────────────────────────────
+
+export const retrieveMsg = async (req: AuthRequest, res: Response) => {
+  await assertParticipant(
+    req.params.roomId as string,
+    req.user?.email as string,
+  );
+
   const { page, skip, limit } = queryFilters(req);
+
   const messages = await Message.find({ roomId: req.params.roomId })
     .sort('-createdAt')
     .limit(limit)
@@ -119,40 +153,39 @@ export const retrieveMsg = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json({ messages, page });
 };
 
-export const updateMsg = async (req: Request, res: Response) => {
-  const userStatus = req.user?.status;
+// ─── updateMsg ───────────────────────────────────────────────────────────────
 
-  if (!userStatus) {
-    throw new UnauthorizedError(
-      'User must be online to mark messages as read.',
-    );
-  }
-
-  const updateFields = {
-    isRead: userStatus === 'online' ? true : false,
-    received: userStatus === 'online' ? true : false,
-  };
-
+export const updateMsg = async (req: AuthRequest, res: Response) => {
+  // FIX #1a — removed stale JWT status guard entirely
+  // FIX #1b — "user" is a plain ObjectId ref, not a nested object;
+  //            "user._id" never matched anything
   const message = await Message.updateMany(
     {
       roomId: req.params.roomId,
-      'user._id': { $ne: req.user?.userId },
+      user: { $ne: req.user?.userId },
     },
-    { $set: updateFields },
+    { $set: { isRead: true, received: true } },
   );
 
   if (!message)
-    throw new NotFoundError(`No message with id: ${req.params.roomId}`);
-  res
-    .status(StatusCodes.OK)
-    .json({ message, msg: 'Success! Message updated.' });
+    throw new NotFoundError(`No messages in room: ${req.params.roomId}`);
+
+  res.status(StatusCodes.OK).json({ message, msg: 'Messages marked as read.' });
 };
 
-export const deleteMsg = async (req: Request, res: Response) => {
-  const message = await Message.findByIdAndDelete(req.params.id);
+// ─── deleteMsg ───────────────────────────────────────────────────────────────
+
+export const deleteMsg = async (req: AuthRequest, res: Response) => {
+  // FIX #3 — only the message author may delete it
+  const message = await Message.findOneAndDelete({
+    _id: req.params.id,
+    user: req.user?.userId,
+  });
 
   if (!message)
-    throw new NotFoundError(`No message with id : ${req.params.id}`);
+    throw new UnauthorizedError(
+      'Message not found or you are not allowed to delete it',
+    );
 
-  res.status(StatusCodes.OK).json({ msg: 'Success! Message delete.' });
+  res.status(StatusCodes.OK).json({ msg: 'Message deleted.' });
 };

@@ -126,7 +126,7 @@ const estateSchema = new mongoose.Schema<estateDocument>(
     },
     location: {
       type: { type: String, enum: ['Point'], required: true },
-      coordinates: { type: Array, index: '2dsphere', required: true },
+      coordinates: { type: Array, required: true },
     },
     contact_details: {
       phone_number: {
@@ -222,6 +222,11 @@ estateSchema.index({ location: '2dsphere' });
 estateSchema.index({ user: 1, title: 1, 'photo.0.url': 1 }, { unique: true });
 estateSchema.index({ likedBy: 1 });
 estateSchema.index({ viewedBy: 1 });
+// Performance indexes
+estateSchema.index({ taken: 1, listingType: 1, createdAt: -1 });
+estateSchema.index({ user: 1, createdAt: -1 });
+estateSchema.index({ taken: 1, rentPrice: 1 });
+estateSchema.index({ taken: 1, price: 1 });
 estateSchema.virtual('reviews', {
   ref: 'Review',
   localField: '_id',

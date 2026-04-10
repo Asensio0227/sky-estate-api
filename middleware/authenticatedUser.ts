@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
+import { AuthRequest } from '../types/express';
 import { UnauthenticatedError, UnauthorizedError } from '../errors/custom';
 import Token from '../models/tokenModel';
 import { attachCookiesToResponse, isTokenValid } from '../utils/jwt';
@@ -22,94 +23,114 @@ export interface payloadUser {
 }
 
 export const authenticatedUser = async (
-  req: Request | any,
+  req: AuthRequest,
   res: Response,
   next: NextFunction,
 ) => {
-  let token;
+  const { refresh_token: cookieRefreshToken, access_token: cookieAccessToken } = req.signedCookies;
 
-  // 1️⃣ Authorization header (MOBILE SAFE)
+  // Authorization header (MOBILE / EXPO)
+  let headerToken: string | undefined;
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.split(' ')[1];
+    headerToken = authHeader.split(' ')[1];
   }
 
-  // 2️⃣ Cookie fallback (WEB)
-  if (!token && req.signedCookies?.access_token) {
-    token = req.signedCookies.access_token;
+  // x-refresh-token header (Expo SecureStore — cookies unavailable in native)
+  const headerRefreshToken = req.headers['x-refresh-token'] as string | undefined;
+
+  const GUEST_USER_ID = process.env.GUEST_USER_ID || '67b487476845366caa92ab43';
+
+  // 1️⃣ Try access token (header first, then cookie)
+  const accessToken = headerToken || cookieAccessToken;
+  if (accessToken) {
+    try {
+      const payload: any = isTokenValid(accessToken, process.env.JWT_SECRET!);
+      req.user = { ...payload.user, guestUser: payload.user.userId === GUEST_USER_ID };
+      return next();
+    } catch {
+      // Access token invalid/expired — fall through to refresh token
+    }
   }
 
-  if (!token) {
-    throw new UnauthenticatedError('Authentication Invalid');
+  // 2️⃣ Try refresh token (header for Expo, cookie for web)
+  const refreshToken = headerRefreshToken || cookieRefreshToken;
+  if (refreshToken) {
+    try {
+      const payload: any = isTokenValid(refreshToken, process.env.JWT_SECRET_REFRESH!);
+
+      const existingToken = await Token.findOne({
+        user: payload.user.userId,
+        refreshToken: payload.refreshToken,
+      });
+
+      if (!existingToken || !existingToken.isValid) {
+        throw new UnauthenticatedError('Authentication Invalid');
+      }
+
+      // Issue new access + refresh tokens (rotation)
+      attachCookiesToResponse({
+        res,
+        user: payload.user,
+        refreshToken: existingToken.refreshToken,
+      });
+
+      req.user = { ...payload.user, guestUser: payload.user.userId === GUEST_USER_ID };
+      return next();
+    } catch {
+      throw new UnauthenticatedError('Authentication Invalid');
+    }
   }
 
-  try {
-    const payload: any = isTokenValid(token, process.env.JWT_SECRET!);
-    // Check if this is the guest user
-    const GUEST_USER_ID =
-      process.env.GUEST_USER_ID || '67b487476845366caa92ab43';
-    const guestUserFlag = payload.user.userId === GUEST_USER_ID;
-    req.user = payload.user;
-    req.user.guestUser = guestUserFlag;
-    // req.user = {
-    //   ...payload.user,
-    //   guestUser: guestUserFlag,
-    // };
-    next();
-  } catch {
-    throw new UnauthenticatedError('Authentication Invalid');
-  }
+  throw new UnauthenticatedError('Authentication Invalid');
 };
 
-// export const authenticatedUser = async (
-//   req: Request,
-//   res: Response,
-//   next: NextFunction
-// ) => {
-//   const { refresh_token, access_token } = req.signedCookies;
-//   try {
-//     if (access_token) {
-//       const payload: any | payloadUser = isTokenValid(
-//         access_token,
-//         process.env.JWT_SECRET!
-//       );
-//       req.user = payload.user;
-//       return next();
-//     }
-
-//     const payload: any | payloadUser = isTokenValid(
-//       refresh_token,
-//       process.env.JWT_SECRET_REFRESH!
-//     );
-
-//     const existingToken = await Token.findOne({
-//       user: payload.user.userId,
-//       refreshToken: payload.refreshToken,
-//     });
-
-//     if (!existingToken || !existingToken?.isValid) {
-//       throw new UnauthenticatedError('Authentication Invalid!');
-//     }
-
-//     attachCookiesToResponse({
-//       res,
-//       user: payload.user,
-//       refreshToken: existingToken.refreshToken,
-//     });
-
-//     req.user = payload.user;
-//     next();
-//   } catch (error: any) {
-//     throw new UnauthenticatedError('Authentication Invalid');
-//   }
-// };
-
 export const authorizedPermissions = (...role: string[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
     const userRole = req.user?.role || 'user';
     if (!role.includes(userRole)) {
       throw new UnauthorizedError('Unauthorized to access this route');
     }
     next();
   };
+};
+
+// Special middleware for estate creation:
+// - super-admin and admin: always allowed
+// - member: always allowed
+// - realtor: ONLY if realtorStatus === 'approved'
+// - user / assistant / anything else: blocked
+import User from '../models/userModel';
+
+export const authorizedToCreateAd = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  const role: string = req.user?.role || 'user';
+  const userId = req.user?.userId;
+
+  // Super-admin, admin and member pass through directly
+  if (role === 'super-admin' || role === 'admin' || role === 'member') {
+    return next();
+  }
+
+  // Realtor must also be approved
+  if (role === 'realtor') {
+    const user = await User.findById(userId).select('realtorStatus');
+    if (!user) {
+      throw new UnauthorizedError('User not found');
+    }
+    if (user.realtorStatus !== 'approved') {
+      throw new UnauthorizedError(
+        'Your realtor application is not yet approved. You cannot create listings.',
+      );
+    }
+    return next();
+  }
+
+  // user, assistant, and any other roles are blocked
+  throw new UnauthorizedError(
+    'You do not have permission to create estate listings.',
+  );
 };

@@ -26,7 +26,7 @@ router.put(
   '/:id',
   testingUser,
   testingUser,
-  authorizedPermissions('admin', 'assistant', 'member'),
+  authorizedPermissions('super-admin', 'admin'),
   actionUser
 );
 router.patch('/', testingUser, updatePassword);
