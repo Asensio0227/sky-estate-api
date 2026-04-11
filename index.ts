@@ -26,6 +26,7 @@ import realtorRoute from './routes/realtorRoute';
 import reviewRoute from './routes/reviewRoute';
 import roomRoute from './routes/roomRoute';
 import userRoute from './routes/userRoute';
+import verificationRoute from './routes/verificationRoute';
 
 import connectDB from './db/connect';
 import { authenticatedUser } from './middleware/authenticatedUser';
@@ -101,6 +102,7 @@ app.use('/api/v1/auth', authRoute);
 app.use('/api/v1/user', authenticatedUser, userRoute);
 app.use('/api/v1/estate', authenticatedUser, estateRoute);
 app.use('/api/v1/realtor', authenticatedUser, realtorRoute);
+app.use('/api/v1/verify', authenticatedUser, verificationRoute);
 app.use('/api/v1/review', authenticatedUser, reviewRoute);
 app.use('/api/v1/room', authenticatedUser, roomRoute);
 app.use('/api/v1/message', authenticatedUser, messageRoute);

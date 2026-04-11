@@ -18,43 +18,87 @@ const qs = (v: any): string | undefined => (typeof v === 'string' ? v : Array.is
 
 export const createAd = async (req: AuthRequest, res: Response) => {
   const userId = req.user?.userId;
-  req.body.user = userId;
-  const numericPrice = Number(req.body.price);
-  const numericRentPrice = req.body.rentPrice
-    ? Number(req.body.rentPrice)
-    : undefined;
-  let parsedLocation = req.body.location;
-  if (req.body.location) {
-    if (typeof req.body.location === 'string') {
-      if (
-        req.body.location !== 'undefined' &&
-        req.body.location !== '[object Object]'
-      ) {
-        try {
-          parsedLocation = JSON.parse(req.body.location);
-        } catch (error) {
-          throw new BadRequestError('Invalid location format');
-        }
-      }
-    } else if (typeof req.body.location === 'object') {
-      parsedLocation = req.body.location;
+  const requestorRole = req.user?.role ?? 'user';
+
+  // ── 1. Resolve verificationType ────────────────────────────────────────────
+  // authorizedToCreateAd middleware has already confirmed the caller is allowed
+  // to reach this point. We still need one DB call to determine which badge to
+  // stamp — but only for non-admin users (admins get 'none').
+  let verificationType: 'none' | 'id' | 'realtor' = 'none';
+  let contactDetailsFromProfile: any = {};
+
+  if (requestorRole === 'super-admin' || requestorRole === 'admin' || requestorRole === 'member') {
+    // Admins/members post without personal verification; still fetch contact details
+    const poster = await User.findById(userId).select('contact_details');
+    contactDetailsFromProfile = poster?.contact_details ?? {};
+    verificationType = 'none';
+  } else {
+    // realtor (approved) | user/assistant (id-verified) — middleware confirmed one of these
+    const poster = await User.findById(userId).select(
+      'role realtorStatus idVerification contact_details',
+    );
+    if (!poster) throw new NotFoundError('User not found');
+
+    contactDetailsFromProfile = poster.contact_details ?? {};
+
+    if (poster.role === 'realtor' && poster.realtorStatus === 'approved') {
+      verificationType = 'realtor';
+    } else if (poster.idVerification?.status === 'approved') {
+      verificationType = 'id';
+    } else {
+      // Should never reach here — middleware guards this — but fail loudly if it does
+      throw new UnauthorizedError(
+        'Verification required to post ads. ' +
+        'Please complete ID verification or apply to become a realtor.',
+      );
     }
   }
-  let uris = [];
-  const files: any = req.files;
 
-  if (files && files.length > 0) {
-    uris = await Promise.all(files.map((file: any) => imageUpload(file)));
+  req.body.verificationType = verificationType;
+  req.body.user = userId;
+
+  // Merge contact details: user profile fields are defaults; request body overrides
+  req.body.contact_details = {
+    ...contactDetailsFromProfile,
+    ...req.body.contact_details,
+  };
+
+  // ── 2. Parse numeric fields ────────────────────────────────────────────────
+  if (req.body.price)     req.body.price     = Number(req.body.price);
+  if (req.body.rentPrice) req.body.rentPrice = Number(req.body.rentPrice);
+
+  // ── 3. Parse location ──────────────────────────────────────────────────────
+  if (
+    req.body.location &&
+    typeof req.body.location === 'string' &&
+    req.body.location !== 'undefined' &&
+    req.body.location !== '[object Object]'
+  ) {
+    try {
+      req.body.location = JSON.parse(req.body.location);
+    } catch {
+      throw new BadRequestError('Invalid location format — expected JSON string');
+    }
   }
 
-  const user = await User.findOne({ _id: userId }).select('contact_details');
-  const { contact_details: details }: any = user;
-  if (user)
-    req.body.contact_details = { ...details, ...req.body.contact_details };
-  if (uris.length > 0) req.body.photo = uris;
-  if (req.body.price) req.body.price = numericPrice;
-  if (req.body.rentPrice) req.body.rentPrice = numericRentPrice;
-  req.body.location = parsedLocation;
+  // ── 4. Validate + upload photos (parallel) ─────────────────────────────────
+  const files = req.files as Express.Multer.File[] | undefined;
+  if (files && files.length > 0) {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    for (const file of files) {
+      if (!allowedMimes.includes(file.mimetype)) {
+        throw new BadRequestError(
+          `Invalid file type "${file.mimetype}". Only images (JPEG/PNG/WebP/GIF) are accepted.`,
+        );
+      }
+    }
+    if (files.length > 10) {
+      throw new BadRequestError('You may upload at most 10 photos per listing.');
+    }
+    req.body.photo = await Promise.all(files.map((file) => imageUpload(file)));
+  }
+
+  // ── 5. Create listing ──────────────────────────────────────────────────────
   const ads = await Ads.create({ ...req.body });
 
   res.status(StatusCodes.CREATED).json({ ads });

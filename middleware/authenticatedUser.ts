@@ -110,17 +110,15 @@ export const authorizedToCreateAd = async (
   const role: string = req.user?.role || 'user';
   const userId = req.user?.userId;
 
-  // Super-admin, admin and member pass through directly
+  // Super-admin, admin and member always pass through — no verification required
   if (role === 'super-admin' || role === 'admin' || role === 'member') {
     return next();
   }
 
-  // Realtor must also be approved
+  // Approved realtors pass through — createAd will stamp verificationType = 'realtor'
   if (role === 'realtor') {
     const user = await User.findById(userId).select('realtorStatus');
-    if (!user) {
-      throw new UnauthorizedError('User not found');
-    }
+    if (!user) throw new UnauthorizedError('User not found');
     if (user.realtorStatus !== 'approved') {
       throw new UnauthorizedError(
         'Your realtor application is not yet approved. You cannot create listings.',
@@ -129,7 +127,21 @@ export const authorizedToCreateAd = async (
     return next();
   }
 
-  // user, assistant, and any other roles are blocked
+  // Regular users (role === 'user' | 'assistant') may post IF they have
+  // an approved ID verification — createAd will stamp verificationType = 'id'
+  if (role === 'user' || role === 'assistant') {
+    const user = await User.findById(userId).select('idVerification');
+    if (!user) throw new UnauthorizedError('User not found');
+    if (user.idVerification?.status === 'approved') {
+      return next();
+    }
+    throw new UnauthorizedError(
+      'ID verification required to post listings. ' +
+      'Please submit your ID via POST /api/v1/verify/id and wait for approval.',
+    );
+  }
+
+  // Any other role is blocked
   throw new UnauthorizedError(
     'You do not have permission to create estate listings.',
   );

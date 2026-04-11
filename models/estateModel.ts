@@ -15,8 +15,8 @@ export interface UIEstateDocument extends mongoose.Document {
   location: any;
   contact_details: ContactOb;
   user: mongoose.Types.ObjectId | unknown;
-  likedBy: mongoose.Types.ObjectId | unknown;
-  viewedBy: mongoose.Types.ObjectId | unknown;
+  likedBy: mongoose.Types.ObjectId[];
+  viewedBy: mongoose.Types.ObjectId[];
   average_rating: Number;
   numOfReviews: number;
   category: modalTypes;
@@ -37,6 +37,8 @@ export interface UIEstateDocument extends mongoose.Document {
   isVerified: boolean;
   bedrooms: Number;
   bathrooms: Number;
+  /** Indicates how the poster was verified when the listing was created */
+  verificationType: 'none' | 'id' | 'realtor';
 }
 
 export interface estateDocument extends UIEstateDocument, mongoose.Document {
@@ -85,7 +87,7 @@ const estateSchema = new mongoose.Schema<estateDocument>(
     },
     featured: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     taken: { type: Boolean, default: false },
     listingType: {
@@ -199,9 +201,10 @@ const estateSchema = new mongoose.Schema<estateDocument>(
         ref: 'User',
       },
     ],
-    isVerified: {
-      type: Boolean,
-      default: false,
+    verificationType: {
+      type: String,
+      enum: ['none', 'id', 'realtor'],
+      default: 'none',
     },
     bedrooms: { type: Number, min: 0 },
     bathrooms: { type: Number, min: 0 },
@@ -215,13 +218,13 @@ const estateSchema = new mongoose.Schema<estateDocument>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 estateSchema.index({ location: '2dsphere' });
 estateSchema.index({ user: 1, title: 1, 'photo.0.url': 1 }, { unique: true });
-estateSchema.index({ likedBy: 1 });
-estateSchema.index({ viewedBy: 1 });
+estateSchema.index({ likedBy: 1, createdAt: -1 });
+estateSchema.index({ viewedBy: 1, createdAt: -1 });
 // Performance indexes
 estateSchema.index({ taken: 1, listingType: 1, createdAt: -1 });
 estateSchema.index({ user: 1, createdAt: -1 });
@@ -234,26 +237,26 @@ estateSchema.virtual('reviews', {
   justOne: false,
 });
 
-estateSchema.pre('save', async function (next) {
+estateSchema.pre('save', async function (this: estateDocument, next) {
   try {
-    const Estate = this.constructor as mongoose.Model<estateDocument> | any;
+    const Estate = this.constructor as mongoose.Model<estateDocument>;
 
     const existingDoc = await Estate.findOne({
       user: this.user,
       title: this.title,
-      photo: this.photo,
-      _id: { $ne: this._id }, // IMPORTANT: avoids blocking updates
+      'photo.0.url': this.photo[0]?.url,
+      _id: { $ne: this._id }, // avoids blocking updates to the same document
     });
 
     if (existingDoc) {
       return next(
-        new Error('Document with same title, photo, and user already exists')
+        new Error('Document with same title, photo, and user already exists'),
       );
     }
 
     next();
   } catch (err) {
-    next(err as any);
+    next(err as Error);
   }
 });
 
